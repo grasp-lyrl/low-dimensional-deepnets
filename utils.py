@@ -126,13 +126,13 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1):
     elif name == 'MNIST': sz = 28//resize
     else: assert False
 
-    ds = {'train': f('~/.data', train=True, download=False),
-          'val': f('~/.data', train=False, download=False)}
+    ds = {'train': f('../data', train=True, download=False),
+          'val': f('../data', train=False, download=False)}
 
     x,y = th.tensor(ds['train'].data).float(), th.tensor(ds['train'].targets).long()
     xv,yv = th.tensor(ds['val'].data).float(), th.tensor(ds['val'].targets).long()
 
-    if name == 'mnist':
+    if name == 'MNIST':
         x, xv = x[:,:,:,None], xv[:,:,:,None]
 
     # preprocess to make it zero mean and unit variance
@@ -157,3 +157,15 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1):
         else:
             ds[k] = ds[k].to(dev)
     return ds
+
+def relabel_data(fn, y, frac=0.1, dev='cuda'):
+    d = th.load(fn)
+    yh = d[-1]['yh'].to(dev)
+    _, yi = th.sort(yh, dim=1)
+    y_new = yi[:, -2]
+    # balanced relabel
+    ss = int(len(yh)*frac//10)
+    ys = th.chunk(th.arange(len(y)), 10)
+    for yy in ys:
+        idx = yy[th.randperm(len(yy))][:ss]
+        y[idx] = y_new[idx]

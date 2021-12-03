@@ -5,6 +5,7 @@ import torchvision as thv
 from utils import *
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
+root = os.path.join('results', 'models')
 
 from fastcore.script import *
 
@@ -61,7 +62,7 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True):
         sched.step()
 
         if t < T//10:
-            if t % (T//50) == 0:
+            if t % (T//100) == 0:
                 ss.append(helper(t))
         else:
             if t%(T//10) == 0 or (t == T-1):
@@ -73,17 +74,27 @@ def main(seed:Param('seed', int, default=42),
          widen:Param('widen', int, default=2),
          numc:Param('numc', int, default=2),
          noise_label:Param('noise_label', bool, default=False),
+         relabel:Param('relabel', float, default=0),
          autocast:Param('autocast', bool, default=False)):
+
+    args = dict(seed=seed, widen=widen, numc=numc, noise_label=noise_label)
+
     # use the same seed to setup the task
     setup(2)
-    ds = get_data(sub_sample=False, dev=dev)
+    ds = get_data(sub_sample=0.5, dev=dev)
     if noise_label:
         print('Using noisy labels')
         ds['y'] = ds['y'][th.randperm(len(ds['y']))]
+    if relabel > 0:
+        args.update(dict(relabel=0.0))
+        fn = json.dumps(args).replace(' ', '') + '.p'
+        print(f"Relabeling {relabel*100:.2f}% of data, using model {fn}")
+        relabel_data(os.path.join(root, fn), ds['y'], relabel)
 
     setup(seed)
     m = wide_resnet_t(10, widen, 0, 10, numc).to(dev)
-    ss = fit(m, ds, T=int(2e4), bs=256, autocast=autocast)
+    ss = fit(m, ds, T=int(4e4), bs=128, autocast=autocast)
 
-    fn=json.dumps(dict(seed=seed, widen=widen, numc=numc, noise_label=noise_label)).replace(' ', '')+'.p'
-    th.save(ss, os.path.join('results',fn))
+    args.update(dict(relabel=relabel))
+    fn = json.dumps(args).replace(' ', '')
+    th.save(ss, os.path.join(root, fn+'.p'))
