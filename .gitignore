@@ -3,3 +3,6 @@ inpca_results/*
 *.pyc
 torun.txt
 .ipynb_checkpoints/*
+run.sh
+create_torun.py
+*.pdf
