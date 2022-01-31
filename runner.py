@@ -5,13 +5,11 @@ import torchvision as thv
 from utils import *
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
-root = os.path.join('results', 'models')
+root = os.path.join('results', 'models', 'new')
 
 from fastcore.script import *
 
-def fit(m, ds, T=int(1e5), bs=128, autocast=True):
-    opt = th.optim.SGD(m.parameters(), lr=0.05)
-    sched = th.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=T)
+def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None):
 
     x, y = ds['x'], ds['y']
     xv, yv = ds['xv'], ds['yv']
@@ -71,30 +69,47 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True):
 
 @call_parse
 def main(seed:Param('seed', int, default=42),
-         widen:Param('widen', int, default=2),
-         numc:Param('numc', int, default=2),
-         noise_label:Param('noise_label', bool, default=False),
-         relabel:Param('relabel', float, default=0),
+         model:Param('model', str, default='wr-4-8'),
+         optim:Param('optimizer', str, default='sgd'),
+         sched:Param('scheduler', str, default='cosine'),
+         lr:Param('learning rate', float, default=0.01),
+         momentum:Param('momentum', float, default=0.0),
+         wd:Param('weight decay', float, default=0.0),
+         bn:Param('batch norm', bool, default=True),
          autocast:Param('autocast', bool, default=False)):
 
-    args = dict(seed=seed, widen=widen, numc=numc, noise_label=noise_label)
+    print(seed, model, optim, sched, lr, momentum, wd, bn, autocast)
+    args = dict(seed=seed, m=model, opt=optim, lr=lr, wd=wd, bn=bn)
 
     # use the same seed to setup the task
     setup(2)
-    ds = get_data(sub_sample=0.5, dev=dev)
-    if noise_label:
-        print('Using noisy labels')
-        ds['y'] = ds['y'][th.randperm(len(ds['y']))]
-    if relabel > 0:
-        args.update(dict(relabel=0.0))
-        fn = json.dumps(args).replace(' ', '') + '.p'
-        print(f"Relabeling {relabel*100:.2f}% of data, using model {fn}")
-        relabel_data(os.path.join(root, fn), ds['y'], relabel)
+    ds = get_data(dev=dev)
 
     setup(seed)
-    m = wide_resnet_t(10, widen, 0, 10, numc).to(dev)
-    ss = fit(m, ds, T=int(4e4), bs=128, autocast=autocast)
 
-    args.update(dict(relabel=relabel))
+    mconfig = model.split('-')
+    if mconfig[0] == 'wr':
+        m = wide_resnet_t(10, int(mconfig[1]), 0, 10, int(mconfig[2]), bn=bn).to(dev)
+    elif mconfig[0] == 'allcnn':
+        m = allcnn_t(10, int(mconfig[1]), int(mconfig[2]), bn=bn).to(dev)
+    elif mconfig[0] == 'fc':
+        dims = [32*32*3] + [int(n) for n in mconfig[1:]] + [10]
+        m = fcnn(dims, bn=bn).to(dev)
+
+    T = int(4.5e4)
+    bs = 200
+    if 'sgd' in optim:
+        optimizer = th.optim.SGD(m.parameters(), lr=lr, momentum=momentum, weight_decay=wd, nesterov='n' in optim)
+    elif 'adam' in optim:
+        optimizer = th.optim.Adam(m.parameters(), lr=lr, weight_decay=wd, amsgrad='ams' in optim)
+
+    if sched == 'cosine':
+        sched = th.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T)
+    elif sched == 'linear':
+        sched = th.optim.lr_scheduler.LinearLR(optimizer)
+
+    ss = fit(m, ds, T=T, bs=bs, autocast=autocast, opt=optimizer, sched=sched)
+
+
     fn = json.dumps(args).replace(' ', '')
     th.save(ss, os.path.join(root, fn+'.p'))
