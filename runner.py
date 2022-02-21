@@ -73,17 +73,20 @@ def main(seed:Param('seed', int, default=42),
          optim:Param('optimizer', str, default='sgd'),
          sched:Param('scheduler', str, default='cosine'),
          lr:Param('learning rate', float, default=0.01),
+         bs:Param('batch size', int, default=200),
          momentum:Param('momentum', float, default=0.0),
          wd:Param('weight decay', float, default=0.0),
-         bn:Param('batch norm', bool, default=True),
+         bn:Param('batch norm', bool, default=False),
+         aug:Param('data augmentation', bool, default=False),
          autocast:Param('autocast', bool, default=False)):
 
-    print(seed, model, optim, sched, lr, momentum, wd, bn, autocast)
-    args = dict(seed=seed, m=model, opt=optim, lr=lr, wd=wd, bn=bn)
+    args = dict(seed=seed, m=model, opt=optim, lr=lr, wd=wd, bn=bn, aug=aug, bs=bs)
+    fn = json.dumps(args).replace(' ', '')
+    print(fn)
 
     # use the same seed to setup the task
     setup(2)
-    ds = get_data(dev=dev)
+    ds = get_data(dev=dev, aug=aug)
 
     setup(seed)
 
@@ -96,8 +99,9 @@ def main(seed:Param('seed', int, default=42),
         dims = [32*32*3] + [int(n) for n in mconfig[1:]] + [10]
         m = fcnn(dims, bn=bn).to(dev)
 
-    T = int(4.5e4)
-    bs = 200
+    # T = int(4.5e4)
+    T = 180*50000//bs
+    # bs = 200
     if 'sgd' in optim:
         optimizer = th.optim.SGD(m.parameters(), lr=lr, momentum=momentum, weight_decay=wd, nesterov='n' in optim)
     elif 'adam' in optim:
@@ -111,5 +115,4 @@ def main(seed:Param('seed', int, default=42),
     ss = fit(m, ds, T=T, bs=bs, autocast=autocast, opt=optimizer, sched=sched)
 
 
-    fn = json.dumps(args).replace(' ', '')
     th.save(ss, os.path.join(root, fn+'.p'))

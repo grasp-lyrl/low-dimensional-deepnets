@@ -1,6 +1,7 @@
 from matplotlib.cbook import flatten
 import torch as th
 import torchvision as thv
+import torchvision.transforms as transforms
 import torch.nn as nn
 import numpy as np
 import torch.nn.init as init
@@ -179,16 +180,27 @@ class allcnn_t(nn.Module):
         return self.m(x)
 
 
-def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1):
+def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False):
     assert name in ['CIFAR10', 'CIFAR100', 'MNIST']
 
     f = getattr(thv.datasets, name)
-    if name in ['CIFAR10', 'CIFAR100']: sz = 32//resize
+
+    if name in ['CIFAR10', 'CIFAR100']: 
+        sz = 32//resize
+        if aug:
+            transform_train = transforms.Compose([
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]) 
+        else:
+            transform_train = transforms.ToTensor()
     elif name == 'STL10': sz = 96//resize
-    elif name == 'MNIST': sz = 28//resize
+    elif name == 'MNIST': 
+        sz = 28//resize
     else: assert False
 
-    ds = {'train': f('../data', train=True, download=False),
+    ds = {'train': f('../data', train=True, download=False, transform=transform_train),
           'val': f('../data', train=False, download=False)}
 
     x,y = th.tensor(ds['train'].data).float(), th.tensor(ds['train'].targets).long()
