@@ -15,6 +15,8 @@ jacobian = autograd.functional.jacobian
 hessian = autograd.functional.hessian
 
 import os, sys, pdb, tqdm, random, json, gzip, bz2
+import glob
+import pandas as pd
 from copy import deepcopy
 from collections import defaultdict
 from functools import partial
@@ -243,3 +245,77 @@ def relabel_data(fn, y, frac=0.1, dev='cuda'):
     for yy in ys:
         idx = yy[th.randperm(len(yy))][:ss]
         y[idx] = y_new[idx]
+
+def load_d(loc, cond={}):
+    r = []
+    for f in glob.glob(os.path.join(loc, '*}.p')):
+        configs = json.loads(f[f.find('{'):f.find('}')+1])
+        if all(configs[k] == v for (k, v) in cond.items()):
+            d = th.load(f)
+            for i in range(len(d)):
+                t = {}
+                t.update(configs)
+                t.update({'t': i})
+                t.update(d[i])
+                r.append(t)
+
+    d = pd.DataFrame(r)
+    d['err'] = d.apply(lambda r: r.e.mean().item(), axis=1)
+    d['verr'] = d.apply(lambda r: r.ev.mean().item(), axis=1)
+    d['favg'] = d.apply(lambda r: r.f.mean().item(), axis=1)
+    d['vfavg'] = d.apply(lambda r: r.fv.mean().item(), axis=1)
+
+    print(d.keys(), len(d))
+    del r
+
+    return d
+
+
+def avg_model(d, groupby=['m', 't'], get_err=True, compute_distance=False, dev='cuda'):
+    def get_idx(dd, cond):
+        return dd.query(cond).index.tolist()
+
+    key = ['yh', 'yvh']
+    n_data = d[key].iloc[0].shape[0]
+
+    avg = {}
+    for k in key:
+        d[k] = d.apply(lambda r: np.exp(r[k].numpy()), axis=1)
+
+    avg = d.groupby(groupby)[key].mean(numeric_only=False).reset_index()
+
+    if get_err:
+        for k in key:
+            ykey = k.strip("h")
+            y = get_data(dev='cuda')[ykey]
+            n = len(y)
+            preds = np.argmax(np.stack(avg[k]).reshape(-1, n, 10), -1)
+            err = ((th.Tensor(preds).cuda() != y).sum(1) / n).cpu().numpy()
+            avg[f'{ykey[1:]}err'] = err
+
+    if compute_distance:
+        dists = []
+        for i in range(len(avg)):
+            config = {}
+            for k in groupby:
+                v = avg.iloc[i][k]
+                if isinstance(v, str):
+                    v = f"'{v}'"
+                config[k] = v
+            ii = get_idx(d, "&".join(
+                [f"{k} == {v}" for (k, v) in config.items()]))
+
+            x1 = avg.iloc[i][key].reshape(n, 1, -1)
+            x2 = th.stack(d.loc[ii][key]).reshape(n, len(ii), -1)
+            x1 = th.sqrt(th.Tensor(x1)).to(dev)
+            x2 = th.sqrt(th.Tensor(x2)).to(dev)
+
+            dist = -th.log(th.bmm(x2, x1.transpose(1, 2))).sum(0)
+
+            for (j, dj) in enumerate(dist):
+                dic = dict(dist=dj.item())
+                dic.update(config)
+                dists.append(dic)
+        dists = pd.DataFrame(dists)
+        return avg, dists
+    return avg
