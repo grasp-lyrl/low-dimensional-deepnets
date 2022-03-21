@@ -271,7 +271,7 @@ def load_d(loc, cond={}):
     return d
 
 
-def avg_model(d, groupby=['m', 't'], get_err=True, compute_distance=False, dev='cuda'):
+def avg_model(d, groupby=['m', 't'], get_err=True, probs=False, compute_distance=False, dev='cuda'):
     def get_idx(dd, cond):
         return dd.query(cond).index.tolist()
 
@@ -279,8 +279,9 @@ def avg_model(d, groupby=['m', 't'], get_err=True, compute_distance=False, dev='
     n_data = d[key].iloc[0].shape[0]
 
     avg = {}
-    for k in key:
-        d[k] = d.apply(lambda r: np.exp(r[k].numpy()), axis=1)
+    if not probs:
+        for k in key:
+            d[k] = d.apply(lambda r: np.exp(r[k].numpy()), axis=1)
 
     avg = d.groupby(groupby)[key].mean(numeric_only=False).reset_index()
 
