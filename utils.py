@@ -246,7 +246,7 @@ def relabel_data(fn, y, frac=0.1, dev='cuda'):
         idx = yy[th.randperm(len(yy))][:ss]
         y[idx] = y_new[idx]
 
-def load_d(loc, cond={}):
+def load_d(loc, cond={}, avg_err=False):
     r = []
     for f in glob.glob(os.path.join(loc, '*}.p')):
         configs = json.loads(f[f.find('{'):f.find('}')+1])
@@ -260,10 +260,11 @@ def load_d(loc, cond={}):
                 r.append(t)
 
     d = pd.DataFrame(r)
-    d['err'] = d.apply(lambda r: r.e.mean().item(), axis=1)
-    d['verr'] = d.apply(lambda r: r.ev.mean().item(), axis=1)
-    d['favg'] = d.apply(lambda r: r.f.mean().item(), axis=1)
-    d['vfavg'] = d.apply(lambda r: r.fv.mean().item(), axis=1)
+    if avg_err:
+        d['err'] = d.apply(lambda r: r.e.mean().item(), axis=1)
+        d['verr'] = d.apply(lambda r: r.ev.mean().item(), axis=1)
+        d['favg'] = d.apply(lambda r: r.f.mean().item(), axis=1)
+        d['vfavg'] = d.apply(lambda r: r.fv.mean().item(), axis=1)
 
     print(d.keys(), len(d))
     del r
@@ -271,20 +272,22 @@ def load_d(loc, cond={}):
     return d
 
 
-def avg_model(d, groupby=['m', 't'], get_err=True, probs=False, compute_distance=False, dev='cuda'):
-    def get_idx(dd, cond):
-        return dd.query(cond).index.tolist()
-
+def avg_model(d, groupby=['m', 't'], probs=False, avg=None, get_err=True, compute_distance=False, dev='cuda', distf=th.cdist):
     key = ['yh', 'yvh']
     n_data = d[key].iloc[0].shape[0]
 
-    avg = {}
-    if not probs:
+    if avg is None:
+        #         avg = {}
         for k in key:
-            d[k] = d.apply(lambda r: np.exp(r[k].numpy()), axis=1)
+            if isinstance(d.iloc[0][k], th.Tensor):
+                if not probs:
+                    d[k] = d.apply(lambda r: np.exp(
+                        r[k].flatten().numpy()), axis=1)
+                else:
+                    d[k] = d.apply(lambda r: r[k].flatten().numpy(), axis=1)
 
-    avg = d.groupby(groupby)[key].mean(numeric_only=False).reset_index()
-
+        avg = d.groupby(groupby)[key].mean(numeric_only=False).reset_index()
+#         print(avg)
     if get_err:
         for k in key:
             ykey = k.strip("h")
@@ -306,17 +309,71 @@ def avg_model(d, groupby=['m', 't'], get_err=True, probs=False, compute_distance
             ii = get_idx(d, "&".join(
                 [f"{k} == {v}" for (k, v) in config.items()]))
 
-            x1 = avg.iloc[i][key].reshape(n, 1, -1)
-            x2 = th.stack(d.loc[ii][key]).reshape(n, len(ii), -1)
-            x1 = th.sqrt(th.Tensor(x1)).to(dev)
-            x2 = th.sqrt(th.Tensor(x2)).to(dev)
-
-            dist = -th.log(th.bmm(x2, x1.transpose(1, 2))).sum(0)
-
-            for (j, dj) in enumerate(dist):
-                dic = dict(dist=dj.item())
-                dic.update(config)
-                dists.append(dic)
+            for k in key:
+                x1 = avg.iloc[i][k].reshape(1, -1, 10)
+                x2 = np.stack(d.loc[ii][k]).reshape(len(ii), -1, 10)
+                x1 = th.Tensor(x1).transpose(0, 1).to(dev)
+                x2 = th.Tensor(x2).transpose(0, 1).to(dev)
+#                 dist = -th.log(th.bmm(x2, x1.transpose(1,2))).mean(0)
+                dist = distf(x2, x1).mean(0)
+                for (j, dj) in enumerate(dist):
+                    dic = dict(dist=dj.item(), key=k)
+                    for (kc, vc) in config.items():
+                        if isinstance(vc, str):
+                            vc = vc.strip("''")
+                        dic.update({kc: vc})
+#                     dic.update(config)
+                    dists.append(dic)
         dists = pd.DataFrame(dists)
         return avg, dists
     return avg
+
+# def avg_model(d, groupby=['m', 't'], get_err=True, probs=False, compute_distance=False, dev='cuda'):
+#     def get_idx(dd, cond):
+#         return dd.query(cond).index.tolist()
+
+#     key = ['yh', 'yvh']
+#     n_data = d[key].iloc[0].shape[0]
+
+#     avg = {}
+#     if not probs:
+#         for k in key:
+#             d[k] = d.apply(lambda r: np.exp(r[k].numpy()), axis=1)
+
+#     avg = d.groupby(groupby)[key].mean(numeric_only=False).reset_index()
+
+#     if get_err:
+#         for k in key:
+#             ykey = k.strip("h")
+#             y = get_data(dev='cuda')[ykey]
+#             n = len(y)
+#             preds = np.argmax(np.stack(avg[k]).reshape(-1, n, 10), -1)
+#             err = ((th.Tensor(preds).cuda() != y).sum(1) / n).cpu().numpy()
+#             avg[f'{ykey[1:]}err'] = err
+
+#     if compute_distance:
+#         dists = []
+#         for i in range(len(avg)):
+#             config = {}
+#             for k in groupby:
+#                 v = avg.iloc[i][k]
+#                 if isinstance(v, str):
+#                     v = f"'{v}'"
+#                 config[k] = v
+#             ii = get_idx(d, "&".join(
+#                 [f"{k} == {v}" for (k, v) in config.items()]))
+
+#             x1 = avg.iloc[i][key].reshape(n, 1, -1)
+#             x2 = th.stack(d.loc[ii][key]).reshape(n, len(ii), -1)
+#             x1 = th.sqrt(th.Tensor(x1)).to(dev)
+#             x2 = th.sqrt(th.Tensor(x2)).to(dev)
+
+#             dist = -th.log(th.bmm(x2, x1.transpose(1, 2))).sum(0)
+
+#             for (j, dj) in enumerate(dist):
+#                 dic = dict(dist=dj.item())
+#                 dic.update(config)
+#                 dists.append(dic)
+#         dists = pd.DataFrame(dists)
+#         return avg, dists
+#     return avg
