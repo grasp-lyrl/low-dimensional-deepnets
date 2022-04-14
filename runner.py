@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torchvision as thv
 
 from utils import *
+from networks import *
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
 root = os.path.join('results', 'models', 'new')
