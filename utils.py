@@ -17,6 +17,7 @@ import pandas as pd
 from copy import deepcopy
 from scipy.interpolate import interpn
 
+
 def setup(seed):
     th.manual_seed(seed)
     th.cuda.manual_seed(seed)
@@ -24,6 +25,7 @@ def setup(seed):
     random.seed(seed)
     cudnn.benchmark = True
     cudnn.deterministic = True
+
 
 def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
@@ -81,17 +83,6 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False):
             ds[k] = ds[k].to(dev)
     return ds
 
-def relabel_data(fn, y, frac=0.1, dev='cuda'):
-    d = th.load(fn)
-    yh = d[-1]['yh'].to(dev)
-    _, yi = th.sort(yh, dim=1)
-    y_new = yi[:, -2]
-    # balanced relabel
-    ss = int(len(yh)*frac//10)
-    ys = th.chunk(th.arange(len(y)), 10)
-    for yy in ys:
-        idx = yy[th.randperm(len(yy))][:ss]
-        y[idx] = y_new[idx]
 
 def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True):
     r = []
@@ -139,10 +130,11 @@ def drop_untrained(dd, key='err', th=0.01, verbose=False):
 
 
 def avg_model(d, groupby=['m', 't'], probs=False, avg=None, get_err=True, update_d=False,
-                compute_distance=False, dev='cuda', distf=th.cdist):
+              compute_distance=False, dev='cuda', distf=lambda x, y: th.cdist(x, y).mean(0)):
     keys = ['yh', 'yvh']
-    n_data = d[keys[0]].iloc[0].shape[0]
+    d_return = {}
 
+    n_data = {k: d[k].iloc[0].shape[0] for k in keys}
     if avg is None:
         for k in keys:
             if isinstance(d.iloc[0][k], th.Tensor):
@@ -154,61 +146,50 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, get_err=True, update
                    
         avg = d.groupby(groupby)[keys].mean(numeric_only=False).reset_index()
         for k in keys:
-            avg[k] = avg.apply(lambda r: r[k].reshape(n_data, -1), axis=1)
-            d[k] = d.apply(lambda r: r[k].reshape(n_data, -1), axis=1)
-
+            avg[k] = avg.apply(lambda r: r[k].reshape(n_data[k], -1), axis=1)
+            d[k] = d.apply(lambda r: r[k].reshape(n_data[k], -1), axis=1)
 
     if get_err:
         for k in keys:
             ykey = k.strip("h")
             y = get_data(dev='cuda')[ykey]
             n = len(y)
-            preds = np.argmax(np.stack(avg[k]).reshape(-1, n, 10), -1)
+            out = np.stack(avg[k])
+            preds = np.argmax(out, -1)
             err = ((th.Tensor(preds).cuda() != y).sum(1) / n).cpu().numpy()
             avg[f'{ykey[1:]}err'] = err
+
+
+    if compute_distance:
+        dists = []
+        indices = d.groupby(groupby).indices
+        for i in range(len(avg)):
+            config = tuple(avg.iloc[i][groupby])
+            ii = indices[config]
+            for k in keys:
+                x1 = th.Tensor(avg.iloc[i][k]).unsqueeze(0).transpose(0, 1).to(dev)
+                x2 = th.Tensor(np.stack(d.iloc[ii][k])).transpose(0, 1).to(dev)
+                dist = distf(x2, x1)
+                for (j, dj) in enumerate(dist):
+                    dic = dict(dist=dj.item(), key=k)
+                    dic.update({groupby[i]:config[i] for i in range(len(groupby))})
+                    dists.append(dic)
+        dists = pd.DataFrame(dists)
+        d_return['dists'] = dists
 
     if update_d:
         avg['avg'] = True
         avg['seed'] = -1
         d['avg'] = False
-        d = pd.concat([d, avg])
-
-    if compute_distance:
-        dists = []
-        for i in range(len(avg)):
-            config = {}
-            for k in groupby:
-                v = avg.iloc[i][k]
-                if isinstance(v, str):
-                    v = f"'{v}'"
-                config[k] = v
-            ii = get_idx(d, "&".join(
-                [f"{k} == {v}" for (k, v) in config.items()]))
-
-            for k in keys:
-                x1 = avg.iloc[i][k].reshape(1, -1, 10)
-                x2 = np.stack(d.loc[ii][k]).reshape(len(ii), -1, 10)
-                x1 = th.Tensor(x1).transpose(0, 1).to(dev)
-                x2 = th.Tensor(x2).transpose(0, 1).to(dev)
-                dist = distf(x2, x1).mean(0)
-                for (j, dj) in enumerate(dist):
-                    dic = dict(dist=dj.item(), key=k)
-                    for (kc, vc) in config.items():
-                        if isinstance(vc, str):
-                            vc = vc.strip("''")
-                        dic.update({kc: vc})
-                    dists.append(dic)
-        dists = pd.DataFrame(dists)
-        if update_d:
-            return d, dists
-        else:
-            return avg, dists
-    if update_d:
-        return d
+        d = pd.concat([avg, d]).reset_index()
+        d_return['d'] = d
     else:
-        return avg
+        d_return['avg'] = avg
 
-def interpolate(d, columns, ts, pts, keys=['yh', 'yvh'], dev='cuda', save=False, fn='', loc=''):
+    return d_return
+
+
+def interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=['yh', 'yvh'], dev='cuda'):
     r = []
     N = len(pts)
     y = get_data(dev=dev)
@@ -219,14 +200,12 @@ def interpolate(d, columns, ts, pts, keys=['yh', 'yvh'], dev='cuda', save=False,
             traj = np.stack(d.iloc[idx][k])
             traj_ = interpn(ts.reshape(1, -1), traj, pts)
             traj_interp[k] = th.Tensor(traj_).to(dev)
-            print(traj_.shape)
         for i in range(N):
             t = {}
-            t.update({groupby[i]: ci for (i, ci) in enumerate(c)})
+            t.update({columns[i]: ci for (i, ci) in enumerate(c)})
             t.update({'t': pts[i]})
             for k in keys:
                 ti = traj_interp[k][i, :].reshape(-1, 10)
-                assert th.allclose(ti.sum(1), th.ones_like(ti.sum(1)))
                 t.update({k: ti.cpu().numpy()})
                 f = -th.gather(th.log(ti+1e-8), 1, y[k[:-1]].view(-1, 1)).mean()
                 acc = th.eq(th.argmax(ti, axis=1), y[k[:-1]]).float()

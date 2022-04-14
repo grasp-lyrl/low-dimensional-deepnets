@@ -45,7 +45,8 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None):
     m.train()
     iis = np.arange(x.shape[0])
     ss = []
-    for t in tqdm.tqdm(range(T)):
+    ss.append(helper(0))
+    for t in tqdm.tqdm(range(1, T+1)):
         ii = np.random.choice(iis, bs)
         xx, yy = x[ii], y[ii]
 
@@ -60,12 +61,12 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None):
         opt.step()
         sched.step()
 
-        if t < T//10:
-            if t % (T//100) == 0:
-                ss.append(helper(t))
+        if (t-1) < T//10:
+            if (t-1) % (T//100) == 0:
+                ss.append(helper(t-1))
         else:
-            if t%(T//10) == 0 or (t == T-1):
-                ss.append(helper(t))
+            if (t-1)%(T//10) == 0 or (t == T):
+                ss.append(helper(t-1))
     return ss
 
 @call_parse

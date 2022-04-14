@@ -1,6 +1,19 @@
+import torch as th
 from matplotlib.colors import Normalize
 from matplotlib import pyplot as plt
+from utils import *
 
+def relabel_data(fn, y, frac=0.1, dev='cuda'):
+    d = th.load(fn)
+    yh = d[-1]['yh'].to(dev)
+    _, yi = th.sort(yh, dim=1)
+    y_new = yi[:, -2]
+    # balanced relabel
+    ss = int(len(yh)*frac//10)
+    ys = th.chunk(th.arange(len(y)), 10)
+    for yy in ys:
+        idx = yy[th.randperm(len(yy))][:ss]
+        y[idx] = y_new[idx]
 
 
 def F_test(d, avg, dists, fixed='m', group='opt', key='yh', distf=th.cdist, ts=range(20),
@@ -31,7 +44,7 @@ def F_test(d, avg, dists, fixed='m', group='opt', key='yh', distf=th.cdist, ts=r
             F.append({fixed: c.strip("''"), 'sb': sb.item(),
                      'sw': sw.item(), 'F': (sb/sw).item(), 't': t})
     return F
-
+    
 
 def avg_plot(dc, r, d=3, configs=["opt == 'adam'"], cmap='vlag', tri=False,
              mkey='', mdict=None, ckey='', cdict=None, evals=False):
