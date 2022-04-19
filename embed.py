@@ -35,14 +35,14 @@ def embed(dd, fn='', ss=slice(0,-1,1), probs=False, ne=3, key='yh', force=False,
     th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return
 
-def dist_(xs, probs=True, dev='cuda', distf='bhat', reduction='sum'):
+def dist_(xs, probs=True, dev='cuda', distf='bhat', reduction='sum', chunks=200):
     if not isinstance(xs, th.Tensor):
         xs = th.Tensor(xs)
     # xs = xs.to(dev)
     n = len(xs)
     xs = th.moveaxis(xs, 0, 1)
     w = np.zeros([n, n])
-    nc = 200 if n < 3000 else 800
+    nc = chunks
     print('chunks: ', nc)
     if distf == 'bhat':
         xs = xs if probs else th.exp(xs)
@@ -125,7 +125,8 @@ def main():
     ts = np.expand_dims(np.array(ts), 0)
     d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
                       update_d=True, compute_distance=False, dev='cpu')['d']
-    d = interpolate(d, ts, pts, keys=['yh', 'yvh'], dev='cpu')
+    d = interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=[
+                    'yh', 'yvh'], dev='cpu')
     
     for key in ['yh', 'yvh']:
         # fn = f'{key}_new_subset_{i}_{iv}'

@@ -16,6 +16,7 @@ import glob
 import pandas as pd
 from copy import deepcopy
 from scipy.interpolate import interpn
+from distance import *
 
 
 def setup(seed):
@@ -217,3 +218,16 @@ def interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=['yh', 'yv
             r.append(t)
     d = pd.DataFrame(r)
     return d
+
+
+def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh'):
+    groups = d.groupby(groupby).indices
+    configs = list(groups.keys())
+    dists = np.zeros([len(configs), len(configs)])
+    for i in range(len(configs)):
+        for j in range(i+1, len(configs)):
+            c1, c2 = configs[i], configs[j]
+            x1 = th.Tensor(np.stack(d.iloc[groups[c1]][k].values))
+            x2 = th.Tensor(np.stack(d.iloc[groups[c2]][k].values))
+            dists[i, j], dists[j, i] = dt2t(x1, x2, s=s)
+    return dists, configs
