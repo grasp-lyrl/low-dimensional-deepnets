@@ -1,6 +1,7 @@
 import torch as th
 import numpy as np
 from itertools import product
+from utils import *
 
 
 def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False):
@@ -84,7 +85,7 @@ def dt2t_batch(X, Y, reduction='mean',  dev='cuda', s=0.1, use_min=False):
     dxy = (dxy[:, :-1, :] * dxs.unsqueeze(-1)).sum(1)
     dyx = th.stack(th.split(dp2t_batch(xs=y, Y=X, reduction=reduction, dev=dev, s=s, dys=dxs.unsqueeze(0), use_min=use_min), Ty, 0), dim=0)
     dyx = (dyx[:, :-1, :] * dys.unsqueeze(-1)).sum(1)
-    return (dxy+dyx.T)/2
+    return (th.sqrt(dxy)+th.sqrt(dyx).T)/2
 
 
 def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh', use_min=False):
@@ -105,10 +106,12 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
     configs = list(groups.keys())
     dists = np.zeros([len(configs), len(configs)])
     bidxs = [np.arange(len(configs))[i*batch:(i+1)*batch]
-             for i in range(len(configs)//batch)]
+             for i in range(len(configs)//batch+1)]
     for i in range(len(bidxs)):
         for j in range(i, len(bidxs)):
             c1, c2 = bidxs[i], bidxs[j]
+            if len(c1) == 0 or len(c2) == 0:
+                continue
             print(c1, c2)
             x1 = np.stack([np.stack(d.iloc[groups[configs[i]]][k])
                         for i in c1])
@@ -120,11 +123,18 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
     return dists, configs
 
 
-if __name__ == '__main__':
-    from utils import *
-    varying = {"bs": [200, 400], 
-               "m": ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"],
-               "opt": ["adam", "sgdn", "sgd"]}
+if __name__ == "__main__":
+    # s = 0.1
+    batch = 2
+    loc = 'results/models/new'
+    use_min = True 
+    fname = 'pairwise_dists_bs_mdist'
+
+    varying = {
+        "bs": [200, 400],
+        "m": ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"],
+        "opt": ["adam", "sgdn", "sgd"]
+    }
     fixed = {"aug": [True],
              "wd": [0.0],
              "bn": [True]}
@@ -139,12 +149,9 @@ if __name__ == '__main__':
             if t % (T//10) == 0 or (t == T-1):
                 ts.append(t)
     ts = np.array(ts)
-    tmap = {i: ts[i] for i in range(len(ts))}
     pts = np.concatenate(
         [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
-    N = len(pts)
 
-    loc = 'results/models/new'
     print("loading model")
     d = load_d(loc, cond={**varying, **fixed}, avg_err=True, drop=False, probs=True)
 
@@ -153,11 +160,10 @@ if __name__ == '__main__':
     d = interpolate(d, ts, pts, columns=list(varying.keys()) + ['seed', 'avg'], keys=['yh'], dev='cuda')
 
     print("computing pairwise distance")
-    batch = 2
-    dists, configs = pairwise_dist_batch(d, groups=list(varying.keys()) + ['seed'], use_min=True, batch=batch)
-    dists[np.tril_indices(len(dists)), -(batch-1)] = 0
-    dists = dists + dists.T
+    dists, configs = pairwise_dist_batch(d, groups=list(varying.keys()) + ['seed'], use_min=use_min, s=s, batch=batch)
+    symd = dists
+    symd[np.tril_indices(len(dists), -1)] = 0
+    symd = symd+ symd.T
 
-    th.save({'dists': dists, 'configs': configs},
-            os.path.join(loc, 'pairwise_dists_bs.p'))
-
+    th.save({'dists': dists, 'symd': symd, 'configs': configs, 'groups': list(varying.keys()) + ['seed']},
+            os.path.join(loc, f'{fname}.p'))
