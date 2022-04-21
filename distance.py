@@ -1,5 +1,6 @@
 import torch as th
 import numpy as np
+from itertools import product
 
 
 def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False):
@@ -74,15 +75,15 @@ def dt2t_batch(X, Y, reduction='mean',  dev='cuda', s=0.1, use_min=False):
     x, y = X.flatten(0, 1), Y.flatten(0, 1)
 
     dxs = th.sqrt(th.diag(dbhat(x, x, reduction, dev), 1))
-    dxs = th.stack([dxs[i*Tx:(i+1)*Tx-1] for i in range(Nx)]).unsqueeze(-1)
+    dxs = th.stack([dxs[i*Tx:(i+1)*Tx-1] for i in range(Nx)])
 
     dys = th.sqrt(th.diag(dbhat(y, y, reduction, dev), 1))
-    dys = th.stack([dys[i*Ty:(i+1)*Ty-1] for i in range(Ny)]).unsqueeze(-1)
+    dys = th.stack([dys[i*Ty:(i+1)*Ty-1] for i in range(Ny)])
 
-    dxy = th.stack(th.split(dp2t_batch(x, Y, reduction, dev, s, use_min), Tx, 0), dim=0)
-    dxy = (dxy[:, :-1, :] * dxs).sum(1)
-    dyx = th.stack(th.split(dp2t_batch(y, X, reduction, dev, s, use_min), Ty, 0), dim=0)
-    dyx = (dyx[:, :-1, :] * dys).sum(1)
+    dxy = th.stack(th.split(dp2t_batch(xs=x, Y=Y, reduction=reduction, dev=dev, s=s, dys=dys.unsqueeze(0), use_min=use_min), Tx, 0), dim=0)
+    dxy = (dxy[:, :-1, :] * dxs.unsqueeze(-1)).sum(1)
+    dyx = th.stack(th.split(dp2t_batch(xs=y, Y=X, reduction=reduction, dev=dev, s=s, dys=dxs.unsqueeze(0), use_min=use_min), Ty, 0), dim=0)
+    dyx = (dyx[:, :-1, :] * dys.unsqueeze(-1)).sum(1)
     return (dxy+dyx.T)/2
 
 
@@ -102,28 +103,28 @@ def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh', use_min=False)
 def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh', use_min=False, batch=10):
     groups = d.groupby(groups).indices
     configs = list(groups.keys())
-    dists = th.zeros([len(configs), len(configs)]).to(dev)
+    dists = np.zeros([len(configs), len(configs)])
     bidxs = [np.arange(len(configs))[i*batch:(i+1)*batch]
              for i in range(len(configs)//batch)]
     for i in range(len(bidxs)):
         for j in range(i, len(bidxs)):
             c1, c2 = bidxs[i], bidxs[j]
-    # for (c1, c2) in product(bidxs, bidxs):
             print(c1, c2)
-            x1 = np.stack(np.stack(d.iloc[groups[configs[i]]][k])
-                        for i in c1)
-            x2 = np.stack(np.stack(d.iloc[groups[configs[i]]][k])
-                        for i in c2)
-            dists[:, c2][c1] = dt2t_batch(th.Tensor(x1), th.Tensor(
-                x2), reduction='mean', dev=dev, s=s, use_min=use_min)
+            x1 = np.stack([np.stack(d.iloc[groups[configs[i]]][k])
+                        for i in c1])
+            x2 = np.stack([np.stack(d.iloc[groups[configs[i]]][k])
+                        for i in c2])
+            dist = dt2t_batch(th.Tensor(x1), th.Tensor(x2), reduction='mean', dev=dev, s=s, use_min=use_min)
+            row, col = zip(*list(product(c1, c2)))
+            dists[row, col] = dist.flatten().cpu().numpy()
     return dists, configs
 
 
 if __name__ == '__main__':
     from utils import *
     varying = {"bs": [200, 400], 
-                 "m": ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"],
-                 "opt": ["adam", "sgdn", "sgd"]}
+               "m": ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"],
+               "opt": ["adam", "sgdn", "sgd"]}
     fixed = {"aug": [True],
              "wd": [0.0],
              "bn": [True]}
@@ -145,14 +146,17 @@ if __name__ == '__main__':
 
     loc = 'results/models/new'
     print("loading model")
-    d = load_d(loc, cond={**varying, **fixed}, avg_err=True, drop=True, probs=True)
+    d = load_d(loc, cond={**varying, **fixed}, avg_err=True, drop=False, probs=True)
 
     d = avg_model(d, groupby=list(varying.keys()) + ['t'], probs=True, get_err=True,
                 update_d=True, compute_distance=False, dev='cuda')['d']
     d = interpolate(d, ts, pts, columns=list(varying.keys()) + ['seed', 'avg'], keys=['yh'], dev='cuda')
 
     print("computing pairwise distance")
-    dists, configs = pairwise_dist_batch(d, groups=list(varying.keys()) + ['seed'], s=0.1, batch=2)
+    batch = 2
+    dists, configs = pairwise_dist_batch(d, groups=list(varying.keys()) + ['seed'], use_min=True, batch=batch)
+    dists[np.tril_indices(len(dists)), -(batch-1)] = 0
+    dists = dists + dists.T
 
     th.save({'dists': dists, 'configs': configs},
             os.path.join(loc, 'pairwise_dists_bs.p'))
