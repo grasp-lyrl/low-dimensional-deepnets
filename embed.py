@@ -30,7 +30,7 @@ def embed(dd, fn='', ss=slice(0,-1,1), probs=False, ne=3, key='yh', force=False,
         w = th.load(os.path.join(loc, 'w_%s.p' % fn))
 
     l = np.eye(w.shape[0]) - 1.0/w.shape[0]
-    w = -l @ w @ l 
+    w = -l @ w @ l  # save column & row sums, add back and check.
     r = proj_(w, n, ne)
     th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return

@@ -14,6 +14,7 @@ hessian = autograd.functional.hessian
 import os, sys, pdb, tqdm, random, json, gzip, bz2
 import glob
 import pandas as pd
+from itertools import product
 from copy import deepcopy
 from scipy.interpolate import interpn
 from distance import *
@@ -85,7 +86,7 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False):
     return ds
 
 
-def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True):
+def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True, keys=['yh', 'yvh']):
     r = []
     for f in glob.glob(os.path.join(loc, '*}.p')):
         configs = json.loads(f[f.find('{'):f.find('}')+1])
@@ -105,7 +106,7 @@ def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True):
         d['favg'] = d.apply(lambda r: r.f.mean().item(), axis=1)
         d['vfavg'] = d.apply(lambda r: r.fv.mean().item(), axis=1)
 
-    for k in ['yh', 'yvh']:
+    for k in keys:
         if probs:
             d[k] = d.apply(lambda r: th.exp(r[k]), axis=1)
         if numpy:
@@ -130,9 +131,8 @@ def drop_untrained(dd, key='err', th=0.01, verbose=False):
     return dd.drop(iis)
 
 
-def avg_model(d, groupby=['m', 't'], probs=False, avg=None, get_err=True, update_d=False,
+def avg_model(d, groupby=['m', 't'], probs=False, avg=None, get_err=True, update_d=False, keys=['yh', 'yvh'],
               compute_distance=False, dev='cuda', distf=lambda x, y: th.cdist(x, y).mean(0)):
-    keys = ['yh', 'yvh']
     d_return = {}
 
     n_data = {k: d[k].iloc[0].shape[0] for k in keys}
@@ -219,15 +219,3 @@ def interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=['yh', 'yv
     d = pd.DataFrame(r)
     return d
 
-
-def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh'):
-    groups = d.groupby(groupby).indices
-    configs = list(groups.keys())
-    dists = np.zeros([len(configs), len(configs)])
-    for i in range(len(configs)):
-        for j in range(i+1, len(configs)):
-            c1, c2 = configs[i], configs[j]
-            x1 = th.Tensor(np.stack(d.iloc[groups[c1]][k].values))
-            x2 = th.Tensor(np.stack(d.iloc[groups[c2]][k].values))
-            dists[i, j], dists[j, i] = dt2t(x1, x2, s=s)
-    return dists, configs
