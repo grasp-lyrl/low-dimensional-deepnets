@@ -124,7 +124,7 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
 
 
 if __name__ == "__main__":
-    # s = 0.1
+    s = 0.1
     batch = 2
     loc = 'results/models/new'
     use_min = True 
