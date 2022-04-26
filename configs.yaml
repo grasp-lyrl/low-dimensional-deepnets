@@ -1,0 +1,28 @@
+---
+models:
+  - allcnn-96-144
+  - wr-4-8
+  - fc-1024-512-256-128
+  - convmixer-256-16-8-1
+  - vit-4-512
+bs: 
+  - 200
+  - 400
+  - 1000
+bn:
+  - False
+  - True
+aug:
+  - False
+  - True
+wd:
+  - 0.0
+  - 0.1
+opts:
+  - sgd
+  - sgdn
+  - adam
+scheduler:
+  - cosine
+  - linear
+  - cosine_with_warmup

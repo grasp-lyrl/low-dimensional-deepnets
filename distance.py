@@ -85,7 +85,7 @@ def dt2t_batch(X, Y, reduction='mean',  dev='cuda', s=0.1, use_min=False):
     dxy = (dxy[:, :-1, :] * dxs.unsqueeze(-1)).sum(1)
     dyx = th.stack(th.split(dp2t_batch(xs=y, Y=X, reduction=reduction, dev=dev, s=s, dys=dxs.unsqueeze(0), use_min=use_min), Ty, 0), dim=0)
     dyx = (dyx[:, :-1, :] * dys.unsqueeze(-1)).sum(1)
-    return (th.sqrt(dxy)+th.sqrt(dyx).T)/2
+    return (dxy+dyx.T)/2
 
 
 def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh', use_min=False):
@@ -127,8 +127,8 @@ if __name__ == "__main__":
     s = 0.1
     batch = 2
     loc = 'results/models/new'
-    use_min = True 
-    fname = 'pairwise_dists_bs_mdist'
+    use_min = False
+    fname = 'pairwise_dists_bs_kdist'
 
     varying = {
         "bs": [200, 400],

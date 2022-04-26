@@ -94,12 +94,20 @@ def main(seed:Param('seed', int, default=42),
 
     mconfig = model.split('-')
     if mconfig[0] == 'wr':
-        m = wide_resnet_t(10, int(mconfig[1]), 0, 10, int(mconfig[2]), bn=bn).to(dev)
+        widen_factor, in_planes = mconfig[1:] 
+        m = wide_resnet_t(10, int(widen_factor), 0, 10, int(in_planes), bn=bn).to(dev)
     elif mconfig[0] == 'allcnn':
-        m = allcnn_t(10, int(mconfig[1]), int(mconfig[2]), bn=bn).to(dev)
+        c1, c2 = mconfig[1:]
+        m = allcnn_t(10, int(c1), int(c2), bn=bn).to(dev)
     elif mconfig[0] == 'fc':
         dims = [32*32*3] + [int(n) for n in mconfig[1:]] + [10]
         m = fcnn(dims, bn=bn).to(dev)
+    elif mconfig[0] == 'convmixer':
+        dim, depth, ksize, patch = mconfig[1:]
+        m = convmixer(int(dim), int(depth), int(ksize), int(patch), n_classes=10)
+    elif mconfig[0] == 'vit':
+        patch, dim, depth = mconfig[1:]
+        m = ViT(32, int(patch), 10, int(dim), int(depth), 8, 512, dropout=0.1, emb_dropout=0.1)
 
     # T = int(4.5e4)
     T = 180*50000//bs
@@ -113,6 +121,9 @@ def main(seed:Param('seed', int, default=42),
         sched = th.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T)
     elif sched == 'linear':
         sched = th.optim.lr_scheduler.LinearLR(optimizer)
+    elif sched == 'cosine_with_warmup':
+        sched = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=T//2, cycle_mult=1,
+                                              max_lr=args.lr, warmup_steps=10, gamma=0.01)
 
     ss = fit(m, ds, T=T, bs=bs, autocast=autocast, opt=optimizer, sched=sched)
 
