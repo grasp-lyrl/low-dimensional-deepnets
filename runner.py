@@ -10,7 +10,7 @@ root = os.path.join('results', 'models', 'new')
 
 from fastcore.script import *
 
-def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None):
+def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2)):
 
     x, y = ds['x'], ds['y']
     xv, yv = ds['xv'], ds['yv']
@@ -47,7 +47,10 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None):
     ss = []
     ss.append(helper(0))
     for t in tqdm.tqdm(range(1, T+1)):
-        ii = np.random.choice(iis, bs)
+        if np.max(fix_batch) == 0:
+            ii = np.random.choice(iis, bs)
+        else:
+            ii = fix_batch[t]
         xx, yy = x[ii], y[ii]
 
         with th.autocast(enabled=autocast, device_type='cuda'):
@@ -61,12 +64,12 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None):
         opt.step()
         sched.step()
 
-        if (t-1) < T//10:
-            if (t-1) % (T//100) == 0:
-                ss.append(helper(t-1))
+        if t < T//10:
+            if t % (T//100) == 0:
+                ss.append(helper(t))
         else:
-            if (t-1)%(T//10) == 0 or (t == T):
-                ss.append(helper(t-1))
+            if t %(T//10) == 0 or (t == T):
+                ss.append(helper(t))
     return ss
 
 @call_parse
@@ -80,15 +83,24 @@ def main(seed:Param('seed', int, default=42),
          wd:Param('weight decay', float, default=0.0),
          bn:Param('batch norm', bool, default=False),
          aug:Param('data augmentation', bool, default=False),
+         corner:Param('corner', str, default='normal', choices=['normal','uniform','subsample-200', 'subsample-2000']),
+         batch_seed:Param('batch_seed', int, default=-1),
          autocast:Param('autocast', bool, default=False)):
 
-    args = dict(seed=seed, m=model, opt=optim, lr=lr, wd=wd, bn=bn, aug=aug, bs=bs)
+    args = dict(seed=seed, batch_seed=batch_seed, m=model, opt=optim, lr=lr, wd=wd, bn=bn, aug=aug, 
+                bs=bs, corner=corner)
     fn = json.dumps(args).replace(' ', '')
     print(fn)
 
     # use the same seed to setup the task
     setup(2)
     ds = get_data(dev=dev, aug=aug)
+
+    if batch_seed < 0:
+        fix_batch = np.zeros(2)
+    else:
+        setup(batch_seed)
+        fix_batch = np.random.randint(ds['x'].shape[0], size=(T, bs))
 
     setup(seed)
 
@@ -103,11 +115,12 @@ def main(seed:Param('seed', int, default=42),
         dims = [32*32*3] + [int(n) for n in mconfig[1:]] + [10]
         m = fcnn(dims, bn=bn).to(dev)
     elif mconfig[0] == 'convmixer':
-        dim, depth, ksize, patch = mconfig[1:]
-        m = convmixer(int(dim), int(depth), int(ksize), int(patch), n_classes=10)
+        dim, depth = mconfig[1:]
+        m = convmixer(int(dim), int(depth), kernel_size=9, patch_size=7, n_classes=10, bn=bn).to(dev)
     elif mconfig[0] == 'vit':
-        patch, dim, depth = mconfig[1:]
-        m = ViT(32, int(patch), 10, int(dim), int(depth), 8, 512, dropout=0.1, emb_dropout=0.1)
+        patch, dim = mconfig[1:]
+        m = ViT(image_size=32, patch_size=int(patch), num_classes=10, dim=int(dim), 
+                depth=6, heads=8, mlp_dim=512, dropout=0.1, emb_dropout=0.1).to(dev)
 
     # T = int(4.5e4)
     T = 180*50000//bs
@@ -118,14 +131,26 @@ def main(seed:Param('seed', int, default=42),
         optimizer = th.optim.Adam(m.parameters(), lr=lr, weight_decay=wd, amsgrad='ams' in optim)
 
     if sched == 'cosine':
-        sched = th.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T)
+        scheduler = th.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T)
     elif sched == 'linear':
-        sched = th.optim.lr_scheduler.LinearLR(optimizer)
+        scheduler = th.optim.lr_scheduler.LinearLR(optimizer)
     elif sched == 'cosine_with_warmup':
-        sched = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=T//2, cycle_mult=1,
-                                              max_lr=args.lr, warmup_steps=10, gamma=0.01)
+        scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=T//2, cycle_mult=1,
+                                            max_lr=lr, warmup_steps=10, gamma=0.1)
 
-    ss = fit(m, ds, T=T, bs=bs, autocast=autocast, opt=optimizer, sched=sched)
+    if corner == 'uniform':
+        if bn==False:
+            print("cannot train to the corner, use bn=True")
+            return
+        opt_init = th.optim.SGD(m.parameters(), lr=0.05, momentum=momentum, weight_decay=wd, nesterov='n' in optim)
+        ds_init = relabel_data(ds, frac=1)
+        ss_init = fit(m, ds_init, T=T, bs=bs, autocast=autocast, opt=opt_init, sched = sched)
+    elif corner.split('-')[0] == 'subsample':
+        ds_init = get_data(dev=dev, aug=aug, sub_sample=int(corner.split('-')[1]), shuffle=True)
+        ss_init = fit(m, ds_init, T=T, bs=bs, autocast=autocast, opt=optimizer, sched = sched)
+
+
+    ss = fit(m, ds, T=T, bs=bs, autocast=autocast, opt=optimizer, sched=scheduler, fix_batch=fix_batch)
 
 
     th.save(ss, os.path.join(root, fn+'.p'))

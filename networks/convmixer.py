@@ -11,27 +11,32 @@ class Residual(nn.Module):
 
 
 class convmixer(nn.Module):
-    def __init__(self, dim, depth, kernel_size=9, patch_size=7, n_classes=10):
+    def __init__(self, dim, depth, kernel_size=9, patch_size=7, n_classes=10, bn=False):
         super().__init__()
-        self.m = nn.Sequential(
+        self.m = [
             nn.Conv2d(3, dim, kernel_size=patch_size, stride=patch_size),
             nn.GELU(),
-            nn.BatchNorm2d(dim),
-            *[nn.Sequential(
-                Residual(nn.Sequential(
+        ]
+        if bn:
+            self.m.append(nn.BatchNorm2d(dim))
+        for i in range(depth):
+            block = nn.Sequential(
                     nn.Conv2d(dim, dim, kernel_size,
                               groups=dim, padding="same"),
                     nn.GELU(),
                     nn.BatchNorm2d(dim)
-                )),
-                nn.Conv2d(dim, dim, kernel_size=1),
-                nn.GELU(),
-                nn.BatchNorm2d(dim)
-            ) for i in range(depth)],
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-            nn.Linear(dim, n_classes)
-        )
+                ) if bn else nn.Sequential(
+                    nn.Conv2d(dim, dim, kernel_size,
+                              groups=dim, padding="same"),
+                    nn.GELU(),
+                )
+            self.m.append(Residual(block))
+            self.m.append(nn.Conv2d(dim, dim, kernel_size=1))
+            self.m.append(nn.GELU())
+            if bn:
+                self.m.append(nn.BatchNorm2d(dim))
+        self.m += [nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(), nn.Linear(dim, n_classes)]
+        self.m = nn.Sequential(*self.m)
 
     def forward(self, x):
         return self.m(x)

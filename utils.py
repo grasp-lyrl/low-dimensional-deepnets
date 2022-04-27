@@ -36,7 +36,7 @@ def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
 
 
-def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False):
+def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False, shuffle=False):
     assert name in ['CIFAR10', 'CIFAR100', 'MNIST']
 
     f = getattr(thv.datasets, name)
@@ -62,6 +62,11 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False):
     x,y = th.tensor(ds['train'].data).float(), th.tensor(ds['train'].targets).long()
     xv,yv = th.tensor(ds['val'].data).float(), th.tensor(ds['val'].targets).long()
 
+    if shuffle == True:
+        idx = th.randperm(len(y))
+        x = x[idx]
+        y = y[idx]
+
     if name == 'MNIST':
         x, xv = x[:,:,:,None], xv[:,:,:,None]
 
@@ -73,12 +78,17 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False):
 
     # subsample the dataset, make sure it is balanced
     if sub_sample > 0:
-        ss = int(len(x)*sub_sample//10)
-        y, ii = th.sort(y)
-        x = x[ii]
-        xs, ys = th.chunk(x, 10), th.chunk(y, 10)
-        x = th.cat([xx[:ss] for xx in xs])
-        y = th.cat([yy[:ss] for yy in ys])
+        l = th.max(y)+1  # number of classes
+        # number of samples each class
+        ss = th.div(sub_sample, l, rounding_mode='trunc')
+        x = th.cat([x[(y == i).nonzero().view(-1)][:ss] for i in range(l)])
+        y = th.cat([y[(y == i).nonzero().view(-1)][:ss] for i in range(l)])
+
+        if name == "MNIST":
+            xv = th.cat([xv[(yv == i).nonzero().view(-1)][:850]
+                        for i in range(l)])
+            yv = th.cat([yv[(yv == i).nonzero().view(-1)][:850]
+                        for i in range(l)])
 
     ds = dict(x=x,y=y,xv=xv,yv=yv)
     for k,v in ds.items():
@@ -87,6 +97,17 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False):
         else:
             ds[k] = ds[k].to(dev)
     return ds
+
+
+def relabel_data(ds, frac=1):
+    ds_new = deepcopy(ds)
+    dev = ds['y'].device
+    n = len(ds['y'])
+    n_rand = int(n*frac)
+    idx = th.randperm(n)[:n_rand]
+    y_rand = th.randint(0, 10, (n_rand, )).long().to(dev)
+    ds_new['y'][idx] = y_rand
+    return ds_new
 
 
 def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True, keys=['yh', 'yvh']):

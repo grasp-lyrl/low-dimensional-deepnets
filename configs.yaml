@@ -3,13 +3,13 @@ models:
   - allcnn-96-144
   - wr-4-8
   - fc-1024-512-256-128
-  - convmixer-256-16-8-1
+  - convmixer-1536-20
   - vit-4-512
 bs: 
   - 200
   - 400
   - 1000
-bn:
+bn: # training convmixer without bn is almost impossible, vit uses layernorm instead of bn
   - False
   - True
 aug:
@@ -22,7 +22,8 @@ opts:
   - sgd
   - sgdn
   - adam
-scheduler:
-  - cosine
-  - linear
-  - cosine_with_warmup
+corner:
+  - normal
+  - uniform 
+  - subsample-200 
+  - subsample-2000
