@@ -1,7 +1,8 @@
+import os
 import torch as th
 import numpy as np
 from itertools import product
-from utils import *
+from utils import load_d, avg_model, interpolate
 
 
 def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False):
@@ -23,11 +24,11 @@ def dinpca(x1, x2, sign=1, dev='cuda', sqrt=False):
     return d
 
 
-def dp2t(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None, use_min=False):
+def dp2t(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None):
     # xs: (npoints, num_samples, num_classes)
     # Y: (T, num_samples, num_classes)
     pdists = dbhat(xs, Y, reduction, dev)
-    if use_min:
+    if s == 0.0:
         kdist, _ = pdists.min(1)
     else:
         if dys is None:
@@ -38,26 +39,51 @@ def dp2t(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None, use_min=False):
     return kdist
 
 
-def dt2t(X, Y, reduction='mean',  dev='cuda',s=0.1, sym=False):
+def dt2t(X, Y, reduction='mean', dev='cuda', s=0.1, sym='min', normalization='length'):
     # X: (T, num_samples, num_classes)
     # Y: (T, num_samples, num_classes)
     dxs = th.sqrt(th.diag(dbhat(X, X, reduction, dev), 1))
     dys = th.sqrt(th.diag(dbhat(Y, Y, reduction, dev), 1))
+    lx = dxs.sum()
+    ly = dys.sum()
     dxy = (dp2t(X, Y, reduction, dev, s, dys)[:-1] * dxs).sum() 
     dyx = (dp2t(Y, X, reduction, dev, s, dxs)[:-1] * dys).sum() 
-    if sym:
+
+    if normalization=='length':
+        dxy /= lx
+        dyx /= ly
+
+    if sym == 'min':
+        return min(dxy.item(), dyx.item())
+    elif sym == 'mean':
         return (dxy+dyx).item()/2
-    return dxy.item(), dyx.item()
+    elif sym == 'min_length':
+        return dxy.item() if lx < ly else dyx.item()
+    else:
+        return {'dxy': dxy.item(), 'dyx': dyx.item()}
 
 
-def dp2t_batch(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None, use_min=False):
+def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh', sym='min', normalization='length', dev='cuda', reduction='mean'):
+    groups = d.groupby(groupby).indices
+    configs = list(groups.keys())
+    dists = np.zeros([len(configs), len(configs)])
+    for i in range(len(configs)):
+        for j in range(i+1, len(configs)):
+            c1, c2 = configs[i], configs[j]
+            x1 = th.Tensor(np.stack(d.iloc[groups[c1]][k].values))
+            x2 = th.Tensor(np.stack(d.iloc[groups[c2]][k].values))
+            dists[i, j], dists[j, i] = dt2t(x1, x2, reduction=reduction, dev=dev, s=s, sym=sym, normalization=normalization)
+    return dists, configs
+
+
+def dp2t_batch(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None):
     # xs: (npoints, num_samples, num_classes)
     # Y: (N, T, num_samples, num_classes)
     N, T = Y.shape[:2]
     Y = Y.flatten(0, 1)
     pdists = dbhat(xs, Y, reduction, dev)
     pdists = th.stack(th.split(pdists, T, 1), dim=1)
-    if use_min:
+    if s == 0.0:
         kdist, _ = pdists.min(-1)
     else:
         if dys is None:
@@ -68,7 +94,8 @@ def dp2t_batch(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None, use_min=Fal
         kdist = (th.exp(-pdists/(2*s**2)) * pdists * dys).sum(-1) / Z
     return kdist
 
-def dt2t_batch(X, Y, reduction='mean',  dev='cuda', s=0.1, use_min=False):
+
+def dt2t_batch(X, Y, reduction='mean', dev='cuda', s=0.1, sym='min', normalization='length'):
     # X: (Nx, Tx, num_samples, num_classes)
     # Y: (Ny, Ty, num_samples, num_classes)
     Nx, Tx = X.shape[:2]
@@ -77,31 +104,34 @@ def dt2t_batch(X, Y, reduction='mean',  dev='cuda', s=0.1, use_min=False):
 
     dxs = th.sqrt(th.diag(dbhat(x, x, reduction, dev), 1))
     dxs = th.stack([dxs[i*Tx:(i+1)*Tx-1] for i in range(Nx)])
+    lx = dxs.sum(-1, keepdim=True)
 
     dys = th.sqrt(th.diag(dbhat(y, y, reduction, dev), 1))
     dys = th.stack([dys[i*Ty:(i+1)*Ty-1] for i in range(Ny)])
+    ly = dys.sum(-1, keepdim=True)
 
-    dxy = th.stack(th.split(dp2t_batch(xs=x, Y=Y, reduction=reduction, dev=dev, s=s, dys=dys.unsqueeze(0), use_min=use_min), Tx, 0), dim=0)
+    dxy = th.stack(th.split(dp2t_batch(xs=x, Y=Y, reduction=reduction, dev=dev, s=s, dys=dys.unsqueeze(0)), Tx, 0), dim=0)
     dxy = (dxy[:, :-1, :] * dxs.unsqueeze(-1)).sum(1)
-    dyx = th.stack(th.split(dp2t_batch(xs=y, Y=X, reduction=reduction, dev=dev, s=s, dys=dxs.unsqueeze(0), use_min=use_min), Ty, 0), dim=0)
+    dyx = th.stack(th.split(dp2t_batch(xs=y, Y=X, reduction=reduction, dev=dev, s=s, dys=dxs.unsqueeze(0)), Ty, 0), dim=0)
     dyx = (dyx[:, :-1, :] * dys.unsqueeze(-1)).sum(1)
-    return (dxy+dyx.T)/2
+
+    if normalization == 'length':
+        dxy /= lx
+        dyx /= ly
+
+    if sym == 'min':
+        return th.minimum(dxy, dyx.T)
+    elif sym == 'mean':
+        return (dxy+dyx.T)/2
+    elif sym == 'min_length':
+        mask = lx.repeat(1, Nx) < ly.T.repeat(Ny, 1)
+        dyx[mask] = dxy[mask]
+        return dyx
+    else:
+        return {'dxy': dxy, 'dyx': dyx}
 
 
-def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh', use_min=False):
-    groups = d.groupby(groupby).indices
-    configs = list(groups.keys())
-    dists = np.zeros([len(configs), len(configs)])
-    for i in range(len(configs)):
-        for j in range(i+1, len(configs)):
-            c1, c2 = configs[i], configs[j]
-            x1 = th.Tensor(np.stack(d.iloc[groups[c1]][k].values))
-            x2 = th.Tensor(np.stack(d.iloc[groups[c2]][k].values))
-            dists[i, j], dists[j, i] = dt2t(x1, x2, s=s, use_min=use_min)
-    return dists, configs
-
-
-def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh', use_min=False, batch=10):
+def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh', batch=10, sym='min', normalization='length'):
     groups = d.groupby(groups).indices
     configs = list(groups.keys())
     dists = np.zeros([len(configs), len(configs)])
@@ -117,7 +147,7 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
                         for i in c1])
             x2 = np.stack([np.stack(d.iloc[groups[configs[i]]][k])
                         for i in c2])
-            dist = dt2t_batch(th.Tensor(x1), th.Tensor(x2), reduction='mean', dev=dev, s=s, use_min=use_min)
+            dist = dt2t_batch(th.Tensor(x1), th.Tensor(x2), reduction='mean', dev=dev, s=s, sym=sym, normalization=normalization)
             row, col = zip(*list(product(c1, c2)))
             dists[row, col] = dist.flatten().cpu().numpy()
     return dists, configs
@@ -125,13 +155,14 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
 
 if __name__ == "__main__":
     s = 0.1
-    batch = 2
+    batch = 2 
+    symmetrize = 'min'
+    normalization = 'length'
     loc = 'results/models/new'
-    use_min = False
-    fname = 'pairwise_dists_bs_kdist'
+    fname = f'dist_{s}_{symmetrize}_{normalization}'
 
     varying = {
-        "bs": [200, 400],
+        "bs": [200],
         "m": ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"],
         "opt": ["adam", "sgdn", "sgd"]
     }
@@ -160,7 +191,7 @@ if __name__ == "__main__":
     d = interpolate(d, ts, pts, columns=list(varying.keys()) + ['seed', 'avg'], keys=['yh'], dev='cuda')
 
     print("computing pairwise distance")
-    dists, configs = pairwise_dist_batch(d, groups=list(varying.keys()) + ['seed'], use_min=use_min, s=s, batch=batch)
+    dists, configs = pairwise_dist_batch(d, groups=list(varying.keys()) + ['seed'], s=s, batch=batch, sym=symmetrize, normalization=normalization)
     symd = dists
     symd[np.tril_indices(len(dists), -1)] = 0
     symd = symd+ symd.T

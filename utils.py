@@ -20,7 +20,6 @@ import pandas as pd
 from itertools import product
 from copy import deepcopy
 from scipy.interpolate import interpn
-from distance import *
 
 
 def setup(seed):
