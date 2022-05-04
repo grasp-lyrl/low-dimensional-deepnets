@@ -17,6 +17,7 @@ hessian = autograd.functional.hessian
 import os, sys, pdb, tqdm, random, json, gzip, bz2
 import glob
 import pandas as pd
+import yaml
 from itertools import product
 from copy import deepcopy
 from scipy.interpolate import interpn
@@ -30,33 +31,55 @@ def setup(seed):
     cudnn.benchmark = True
     cudnn.deterministic = True
 
+def get_configs(fname):
+    with open(fname, 'r') as f:
+        configs = yaml.safe_load(f)
+    return configs
 
 def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
 
 
-def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False, shuffle=False):
+def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug='none', shuffle=False):
     assert name in ['CIFAR10', 'CIFAR100', 'MNIST']
 
     f = getattr(thv.datasets, name)
 
     if name in ['CIFAR10', 'CIFAR100']: 
         sz = 32//resize
-        if aug:
+        cifar10_mean = (0.4914, 0.4822, 0.4465)
+        cifar10_std = (0.2471, 0.2435, 0.2616)
+        if aug == 'simple':
             transform_train = transforms.Compose([
                 transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
+                transforms.Normalize(cifar10_mean, cifar10_std)
             ]) 
+        elif aug == 'full':
+            transform_train = transforms.Compose([
+                transforms.RandomResizedCrop(32, scale=(
+                    1.0, 1.0), ratio=(1.0, 1.0)),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandAugment(num_ops=2, magnitude=12),
+                transforms.ColorJitter(0.0, 0.0, 0.0),
+                transforms.ToTensor(),
+                transforms.Normalize(cifar10_mean, cifar10_std),
+                transforms.RandomErasing(p=0.0)
+            ])
         else:
             transform_train = transforms.ToTensor()
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(cifar10_mean, cifar10_std)
+        ])
     elif name == 'STL10': sz = 96//resize
     elif name == 'MNIST': 
         sz = 28//resize
     else: assert False
 
     ds = {'train': f('../data', train=True, download=False, transform=transform_train),
-          'val': f('../data', train=False, download=False)}
+          'val': f('../data', train=False, download=False, transform=transform_test)}
 
     x,y = th.tensor(ds['train'].data).float(), th.tensor(ds['train'].targets).long()
     xv,yv = th.tensor(ds['val'].data).float(), th.tensor(ds['val'].targets).long()
@@ -71,9 +94,9 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug=False, shuff
 
     # preprocess to make it zero mean and unit variance
     x, xv = th.transpose(x, 1, 3), th.transpose(xv, 1, 3)
-    x = (x-th.mean(x, dim=[0,2,3], keepdim=True))/th.std(x, dim=[0,2,3], keepdim=True)
-    xv = (xv-th.mean(xv, dim=[0,2,3], keepdim=True))/th.std(xv, dim=[0,2,3], keepdim=True)
-    x = F.interpolate(x, size=sz, mode='bicubic', align_corners=False)
+    # x = (x-th.mean(x, dim=[0,2,3], keepdim=True))/th.std(x, dim=[0,2,3], keepdim=True)
+    # xv = (xv-th.mean(xv, dim=[0,2,3], keepdim=True))/th.std(xv, dim=[0,2,3], keepdim=True)
+    # x = F.interpolate(x, size=sz, mode='bicubic', align_corners=False)
 
     # subsample the dataset, make sure it is balanced
     if sub_sample > 0:

@@ -1,29 +1,36 @@
 ---
 models:
-  - allcnn-96-144
-  - wr-4-8
+  - allcnn-96-144 
+  - wr-10-4-8 
+  - wr-16-4-64
   - fc-1024-512-256-128
-  - convmixer-1536-20
-  - vit-4-512
+  - convmixer-256-8
 bs: 
   - 200
   - 400
   - 1000
-bn: # training convmixer without bn is almost impossible, vit uses layernorm instead of bn
+bn:
   - False
   - True
 aug:
-  - False
-  - True
+  - none
+  - simple
+  - full
 wd:
   - 0.0
-  - 0.1
+  - 0.01
+  - 0.00001
 opts:
-  - sgd
-  - sgdn
-  - adam
+  - sgd-0.1-0.0
+  - sgdn-0.1-0.9
+  - adam-0.01
 corner:
   - normal
   - uniform 
   - subsample-200 
   - subsample-2000
+batch_random:
+  - False
+  - True
+dataset:
+  - CIFAR10
