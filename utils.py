@@ -50,6 +50,10 @@ def get_opt(optim_args, model):
         max_lr=opt_args['lr'], **sched_args)
     elif sched == 'cosine':
         scheduler = th.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=optim_args['T'])
+    elif sched == 'convmixer':
+        epochs = optim_args['epochs']
+        scheduler = lambda t: np.interp([t], [0, epochs*2//5, epochs*4//5, epochs],
+                                    [0, opt_args['lr'], opt_args['lr']/20.0, 0])[0]
     else:
         scheduler = getattr(th.optim.lr_scheduler, sched)(**sched_args)
 

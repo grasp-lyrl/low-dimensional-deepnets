@@ -53,13 +53,13 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batc
     for t in tqdm.tqdm(range(1, T+1)):
         if np.max(fix_batch) == 0:
             ii = np.random.choice(iis, bs)
-            # bi = (t-1) % esteps
-            # if bi == 0:
-            #     iis = iis[np.random.permutation(x.shape[0])]
-            # ii = iis[bi*bs:(bi+1)*bs]
         else:
             ii = fix_batch[t]
         xx, yy = x[ii], y[ii]
+
+        if not isinstance(sched, th.optim.lr_scheduler._LRScheduler):
+            lr = sched(t / esteps)
+            opt.param_groups[0].update(lr=lr)
 
         with th.autocast(enabled=autocast, device_type='cuda'):
             m.zero_grad()
@@ -70,7 +70,8 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batc
 
         f.backward()
         opt.step()
-        sched.step()
+        if isinstance(sched, th.optim.lr_scheduler._LRScheduler):
+            sched.step()
 
         if t < esteps*25:
             if t % esteps == 0:
@@ -84,10 +85,18 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batc
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--data-args', '-d',  type=str, help='dataset name, augmentation')
-    parser.add_argument('--model-args', '-m', type=str, help='model name, model aruguments, batch normalization')
-    parser.add_argument('--optim-args', '-o', type=str, help='batch size, batch seed, learning rate, optimizer, weight decay')
-    parser.add_argument('--init-args', '-i', type=str, help='start from corner')
+    parser.add_argument('--data-args', '-d',  type=str,
+                        default='./configs/data/cifar10-full.yaml', 
+                        help='dataset name, augmentation')
+    parser.add_argument('--model-args', '-m', type=str, 
+                        default='./configs/model/convmixer-256-8-5-2.yaml',
+                        help='model name, model aruguments, batch normalization')
+    parser.add_argument('--optim-args', '-o', type=str, 
+                        default='./configs/optim/adamw-500-convmixer.yaml',
+                        help='batch size, batch seed, learning rate, optimizer, weight decay')
+    parser.add_argument('--init-args', '-i', type=str, 
+                        default='./configs/init/normal.yaml',
+                        help='start from corner')
 
     args = parser.parse_args()
 
@@ -134,6 +143,5 @@ def main():
     th.save({"data": ss, "configs": args}, os.path.join(root, fn+'.p'))
 
 if __name__ == '__main__':
-    # python runner.py -d ./configs/data/cifar10-full.yaml -m ./configs/model/convmixer-256-8-5-2.yaml -o ./configs/optim/adamw-500.yaml -i ./configs/init/normal.yaml 
-    # gives 88% acc
+    # default setting gives 88% acc
     main()
