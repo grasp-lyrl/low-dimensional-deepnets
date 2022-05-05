@@ -30,7 +30,7 @@ def embed(dd, fn='', ss=slice(0,-1,1), probs=False, ne=3, key='yh', force=False,
         w = th.load(os.path.join(loc, 'w_%s.p' % fn))
 
     l = np.eye(w.shape[0]) - 1.0/w.shape[0]
-    w = -l @ w @ l  # save column & row sums, add back and check.
+    w = -l @ w @ l / 2 # save column & row sums, add back and check.
     r = proj_(w, n, ne)
     th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return
@@ -50,7 +50,7 @@ def dist_(xs, probs=True, dev='cuda', distf='bhat', reduction='sum', chunks=200)
         aa = aa.to(dev)
         if distf == 'bhat':
             aa = th.sqrt(aa)
-            w_ = -th.log(th.bmm(aa, aa.transpose(1, 2)))
+            w_ = -8*th.log(th.bmm(aa, aa.transpose(1, 2)))
             w_[w_ == th.inf] = 100
             w_[w_ < 0] = 0
             w += w_.sum(0).cpu().numpy()
