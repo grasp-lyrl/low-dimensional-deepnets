@@ -5,5 +5,5 @@ model_args:
   widen_factor: 4
   dropout_rate: 0.0
   num_classes: 10
-  in_planes: 16
+  in_planes: 8
   bn: True
