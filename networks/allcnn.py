@@ -1,6 +1,6 @@
 from networks.net_utils import * 
 
-class allcnn_t(nn.Module):
+class allcnn(nn.Module):
     def __init__(self, num_classes=10, c1=96, c2=144, bn=False):
         super().__init__()
         d = 0.5

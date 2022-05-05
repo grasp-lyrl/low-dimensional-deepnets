@@ -1,0 +1,6 @@
+---
+m: "fcnn"
+model_args:
+  dims: [1024, 512, 256, 128]
+  bn: True
+  bias: True

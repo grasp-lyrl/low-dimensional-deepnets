@@ -1,0 +1,22 @@
+---
+corner: "subsample"
+init_opt: 
+  optimizer: AdamW
+  bs: 100 
+  batch_seed: -1
+  T: 2000
+  autocast: False
+  opt_args:
+    weight_decay: 0.0001
+    lr: 0.05
+  scheduler: cosine_with_warmup
+  sched_args:
+    cycle_mult: 1
+    warmup_steps: 10
+    gamma: 0.1
+init_data:
+  name: "CIFAR10"
+  aug: "simple"
+  sub_sample: 200
+  resize: 1
+  shuffle: True

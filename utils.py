@@ -9,8 +9,6 @@ import torch.nn.functional as F
 import torch.autograd as autograd
 import torch.backends.cudnn as cudnn
 
-from torch.cuda.amp import autocast, GradScaler 
-
 jacobian = autograd.functional.jacobian
 hessian = autograd.functional.hessian
 
@@ -22,6 +20,8 @@ from itertools import product
 from copy import deepcopy
 from scipy.interpolate import interpn
 
+import networks
+from runner import fit
 
 def setup(seed):
     th.manual_seed(seed)
@@ -36,12 +36,46 @@ def get_configs(fname):
         configs = yaml.safe_load(f)
     return configs
 
-def get_idx(dd, cond):
-    return dd.query(cond).index.tolist()
+def get_model(model_args, dev='cpu'):
+    m, model_args = model_args['m'], model_args['model_args']
+    return getattr(networks, m)(**model_args).to(dev)
+
+def get_opt(optim_args, model):
+    opt, opt_args = optim_args['optimizer'], optim_args['opt_args']
+    optimizer = getattr(th.optim, opt)(model.parameters(), **opt_args)
+
+    sched, sched_args = optim_args['scheduler'], optim_args['sched_args']
+    if sched == 'cosine_with_warmup':
+        scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=optim_args['T']//2, 
+        max_lr=opt_args['lr'], **sched_args)
+    elif sched == 'cosine':
+        scheduler = th.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=optim_args['T'])
+    else:
+        scheduler = getattr(th.optim.lr_scheduler, sched)(**sched_args)
+
+    return optimizer, scheduler
+
+def get_init(init_args, model, dev='cuda', data=None):
+    corner = init_args['corner']
+    if corner == "normal":
+        return model
+    else:
+        opt_args = init_args['init_opts']
+        opt, sched = get_opt(opt_args, model)
+        if corner == "uniform":
+            ds_init = relabel_data(data, frac=1)
+        elif corner == "subsample":
+            ds_init = get_data(init_args['init_data'], dev=dev)
+        init_ss = fit(model, ds_init, T=opt_args['T'], bs=opt_args['bs'], autocast=opt_args['autocast'], opt=opt, sched=sched)
+        return model
 
 
-def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug='none', shuffle=False):
+def get_data(data_args, dev='cpu', resize=1):
+    name, aug, sub_sample, shuffle = data_args['name'], data_args['aug'], data_args['sub_sample'], data_args['shuffle']
     assert name in ['CIFAR10', 'CIFAR100', 'MNIST']
+    assert aug in ['none', 'simple', 'full']
+    if aug == 'full':
+        aug_args = data_args['aug_args']
 
     f = getattr(thv.datasets, name)
 
@@ -59,15 +93,15 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug='none', shuf
         elif aug == 'full':
             transform_train = transforms.Compose([
                 transforms.RandomResizedCrop(32, scale=(
-                    1.0, 1.0), ratio=(1.0, 1.0)),
+                    aug_args['scale'], 1.0), ratio=(1.0, 1.0)),
                 transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandAugment(num_ops=2, magnitude=12),
-                transforms.ColorJitter(0.0, 0.0, 0.0),
+                transforms.RandAugment(num_ops=aug_args['ra_n'], magnitude=aug_args['ra_m']),
+                transforms.ColorJitter(aug_args['jitter'], aug_args['jitter'], aug_args['jitter']),
                 transforms.ToTensor(),
                 transforms.Normalize(cifar10_mean, cifar10_std),
-                transforms.RandomErasing(p=0.0)
+                transforms.RandomErasing(p=aug_args['reprob'])
             ])
-        else:
+        elif aug == 'none':
             transform_train = transforms.ToTensor()
         transform_test = transforms.Compose([
             transforms.ToTensor(),
@@ -92,11 +126,7 @@ def get_data(name='CIFAR10', sub_sample=0, dev='cpu', resize=1, aug='none', shuf
     if name == 'MNIST':
         x, xv = x[:,:,:,None], xv[:,:,:,None]
 
-    # preprocess to make it zero mean and unit variance
     x, xv = th.transpose(x, 1, 3), th.transpose(xv, 1, 3)
-    # x = (x-th.mean(x, dim=[0,2,3], keepdim=True))/th.std(x, dim=[0,2,3], keepdim=True)
-    # xv = (xv-th.mean(xv, dim=[0,2,3], keepdim=True))/th.std(xv, dim=[0,2,3], keepdim=True)
-    # x = F.interpolate(x, size=sz, mode='bicubic', align_corners=False)
 
     # subsample the dataset, make sure it is balanced
     if sub_sample > 0:
@@ -130,6 +160,10 @@ def relabel_data(ds, frac=1):
     y_rand = th.randint(0, 10, (n_rand, )).long().to(dev)
     ds_new['y'][idx] = y_rand
     return ds_new
+
+
+def get_idx(dd, cond):
+    return dd.query(cond).index.tolist()
 
 
 def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True, keys=['yh', 'yvh']):

@@ -1,6 +1,6 @@
 from networks.net_utils import *
 
-class wide_resnet_t(nn.Module):
+class wide_resnet(nn.Module):
 
     def conv3x3(self, in_planes, out_planes, stride=1):
         return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)

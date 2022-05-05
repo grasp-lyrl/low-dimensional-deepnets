@@ -1,3 +1,5 @@
+import argparse
+from types import SimpleNamespace
 import torch as th
 import torch.nn.functional as F
 import torchvision as thv
@@ -50,17 +52,15 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batc
     ss.append(helper(0))
     for t in tqdm.tqdm(range(1, T+1)):
         if np.max(fix_batch) == 0:
-            # ii = np.random.choice(iis, bs)
-            bi = t % esteps
-            if bi == 0:
-                iis = iis[np.random.permutation(x.shape[0])]
-            ii = iis[bi*bs:(bi+1)*bs]
+            ii = np.random.choice(iis, bs)
+            # bi = (t-1) % esteps
+            # if bi == 0:
+            #     iis = iis[np.random.permutation(x.shape[0])]
+            # ii = iis[bi*bs:(bi+1)*bs]
         else:
             ii = fix_batch[t]
         xx, yy = x[ii], y[ii]
 
-        lr = sched(t / float(esteps))
-        opt.param_groups[0].update(lr=lr)
         with th.autocast(enabled=autocast, device_type='cuda'):
             m.zero_grad()
             yyh = m(xx)
@@ -70,7 +70,7 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batc
 
         f.backward()
         opt.step()
-        # sched.step()
+        sched.step()
 
         if t < esteps*25:
             if t % esteps == 0:
@@ -80,85 +80,60 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batc
                 ss.append(helper(t))
     return ss
 
-@call_parse
-def main(seed:Param('seed', int, default=42),
-         model:Param('model', str, default='wr-4-8'),
-         optim:Param('optimizer', str, default='sgd'),
-         sched:Param('scheduler', str, default='cosine'),
-         lr:Param('learning rate', float, default=0.01),
-         bs:Param('batch size', int, default=200),
-         epochs:Param('epochs', int, default=200),
-         momentum:Param('momentum', float, default=0.0),
-         wd:Param('weight decay', float, default=0.0),
-         bn:Param('batch norm', bool, default=False),
-         aug:Param('data augmentation', str, default='none'),
-         corner:Param('corner', str, default='normal', choices=['normal','uniform','subsample-200', 'subsample-2000']),
-         batch_seed:Param('batch_seed', int, default=-1),
-         autocast:Param('autocast', bool, default=False)):
 
-    args = dict(seed=seed, batch_seed=batch_seed, m=model, opt=optim, lr=lr, wd=wd, bn=bn, aug=aug, 
-                bs=bs, corner=corner)
-    fn = json.dumps(args).replace(' ', '')
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--data-args', '-d',  type=str, help='dataset name, augmentation')
+    parser.add_argument('--model-args', '-m', type=str, help='model name, model aruguments, batch normalization')
+    parser.add_argument('--optim-args', '-o', type=str, help='batch size, batch seed, learning rate, optimizer, weight decay')
+    parser.add_argument('--init-args', '-i', type=str, help='start from corner')
+
+    args = parser.parse_args()
+
+    data_args = get_configs(args.data_args)
+    model_args = get_configs(args.model_args)
+    optim_args = get_configs(args.optim_args)
+    init_args = get_configs(args.init_args)
+
+    args = SimpleNamespace(**{**vars(args), **data_args, **model_args, **optim_args, **init_args})
+    print(args)
+
+    fn = json.dumps(
+        dict(seed=args.seed, 
+            batch_seed=args.batch_seed, 
+            aug=args.aug,
+            m=args.m, 
+            bn=args.model_args['bn'],
+            opt=args.optimizer, bs=args.bs,
+            lr=args.opt_args['lr'], 
+            wd=args.opt_args['weight_decay'], 
+            corner=args.corner)
+    ).replace(' ', '')
     print(fn)
-    # save the configuaration to ss check fname does not overflow.
 
-    # use the same seed to setup the task
     setup(2)
-    ds = get_data(dev=dev, aug=aug)
+    ds = get_data(data_args, dev=dev)
+    T = args.epochs * ds['x'].shape[0] // args.bs
+    optim_args['T'] = T
 
-    if batch_seed < 0:
+    if args.batch_seed < 0:
         fix_batch = np.zeros(2)
     else:
-        setup(batch_seed)
-        fix_batch = np.random.randint(ds['x'].shape[0], size=(T, bs))
+        setup(args.batch_seed)
+        fix_batch = np.random.randint(ds['x'].shape[0], size=(T, args.bs))
 
-    setup(seed)
+    setup(args.seed)
 
-    mconfig = model.split('-')
-    if mconfig[0] == 'wr':
-        depth, widen_factor, in_planes = mconfig[1:] 
-        m = wide_resnet_t(int(depth), int(widen_factor), dropout_rate=0, num_classes=10, in_planes=int(in_planes), bn=bn)
-    elif mconfig[0] == 'allcnn':
-        c1, c2 = mconfig[1:]
-        m = allcnn_t(10, int(c1), int(c2), bn=bn).to(dev)
-    elif mconfig[0] == 'fc':
-        dims = [32*32*3] + [int(n) for n in mconfig[1:]] + [10]
-        m = fcnn(dims, bn=bn).to(dev)
-    elif mconfig[0] == 'convmixer':
-        dim, depth = mconfig[1:]
-        m = convmixer(int(dim), int(depth), kernel_size=5, patch_size=2, n_classes=10).to(dev)
+    m = get_model(model_args, dev=dev)
+    optimizer, scheduler = get_opt(optim_args, m)
 
-    T = epochs*50000//bs
-    if 'sgd' in optim:
-        optimizer = th.optim.SGD(m.parameters(), lr=lr, momentum=momentum, weight_decay=wd, nesterov='n' in optim)
-    elif 'adam' in optim:
-        optimizer = th.optim.AdamW(m.parameters(), lr=lr, weight_decay=wd)
+    m = get_init(init_args, m)
+    ss = fit(m, ds, T=T, bs=optim_args['bs'], autocast=optim_args['autocast'], opt=optimizer, sched=scheduler, fix_batch=fix_batch)
 
-    if sched == 'cosine':
-        scheduler = th.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T)
-    elif sched == 'linear':
-        scheduler = th.optim.lr_scheduler.LinearLR(optimizer)
-    elif sched == 'cosine_with_warmup':
-        scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=T//2, cycle_mult=1,
-                                            max_lr=lr, warmup_steps=10, gamma=0.1)
+    th.save({"data": ss, "configs": args}, os.path.join(root, fn+'.p'))
 
-    elif sched == 'convmixer':
-        scheduler = lambda t: np.interp([t], [0, epochs*2//5, epochs*4//5, epochs],
-                                     [0, lr, lr/20.0, 0])[0]
-
-    if corner == 'uniform':
-        if bn==False:
-            print("cannot train to the corner, use bn=True")
-            return
-        opt_init = th.optim.SGD(m.parameters(), lr=0.05, momentum=momentum, weight_decay=wd, nesterov='n' in optim)
-        ds_init = relabel_data(ds, frac=1)
-        ss_init = fit(m, ds_init, T=T, bs=bs, autocast=autocast, opt=opt_init, sched = sched)
-    elif corner.split('-')[0] == 'subsample':
-        ds_init = get_data(dev=dev, aug=aug, sub_sample=int(corner.split('-')[1]), shuffle=True)
-        ss_init = fit(m, ds_init, T=T//10, bs=bs, autocast=autocast, opt=optimizer, sched = sched)
-
-
-    ss = fit(m, ds, T=T, bs=bs, autocast=autocast, opt=optimizer, sched=scheduler, fix_batch=fix_batch)
-
-    th.save(ss, os.path.join(root, fn+'.p'))
-    # update to s3 and delete local file
+if __name__ == '__main__':
+    # python runner.py -d ./configs/data/cifar10-full.yaml -m ./configs/model/convmixer-256-8-5-2.yaml -o ./configs/optim/adamw-500.yaml -i ./configs/init/normal.yaml 
+    # gives 88% acc
+    main()

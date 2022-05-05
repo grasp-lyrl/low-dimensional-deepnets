@@ -1,0 +1,9 @@
+---
+m: "convmixer"
+model_args:
+  dim: 256
+  depth: 8
+  kernel_size: 5
+  patch_size: 2
+  n_classes: 10
+  bn: True
