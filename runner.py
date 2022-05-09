@@ -90,7 +90,7 @@ def main():
                         default='./configs/model/convmixer-256-8-5-2.yaml',
                         help='model name, model aruguments, batch normalization')
     parser.add_argument('--optim-args', '-o', type=str, 
-                        default='./configs/optim/adamw-500.yaml',
+                        default='./configs/optim/adamw-500-convmixer.yaml',
                         help='batch size, batch seed, learning rate, optimizer, weight decay')
     parser.add_argument('--init-args', '-i', type=str, 
                         default='./configs/init/normal.yaml',
@@ -142,5 +142,5 @@ def main():
     th.save({"data": ss, "configs": args}, os.path.join(root, fn+'.p'))
 
 if __name__ == '__main__':
-    # default setting gives 88% acc
+    # default setting gives 92% acc
     main()

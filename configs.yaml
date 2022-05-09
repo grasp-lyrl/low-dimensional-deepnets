@@ -1,21 +1,21 @@
 ---
-models:
-  - allcnn-96-144 
-  - wr-10-4-8 
-  - wr-16-4-64
-  - fc-1024-512-256-128
-  - convmixer-256-8
+# models:
+#   - allcnn-96-144 
+#   - wr-10-4-8 
+#   - wr-16-4-64
+#   - fc-1024-512-256-128
+#   - convmixer-256-8
 bs: 
   - 200
-  - 400
+  - 500
   - 1000
 bn:
   - False
   - True
-aug:
-  - none
-  - simple
-  - full
+# aug:
+#   - none
+#   - simple
+#   - full
 wd:
   - 0.0
   - 0.01
