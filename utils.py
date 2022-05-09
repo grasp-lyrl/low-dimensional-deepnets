@@ -74,8 +74,8 @@ def get_init(init_args, model, dev='cuda', data=None):
         return model
 
 
-def get_data(data_args, dev='cpu', resize=1):
-    name, aug, sub_sample, shuffle = data_args['name'], data_args['aug'], data_args['sub_sample'], data_args['shuffle']
+def get_data(data_args, resize=1):
+    name, aug, sub_sample = data_args['name'], data_args['aug'], data_args['sub_sample']
     assert name in ['CIFAR10', 'CIFAR100', 'MNIST']
     assert aug in ['none', 'simple', 'full']
     if aug == 'full':
@@ -119,42 +119,21 @@ def get_data(data_args, dev='cpu', resize=1):
     ds = {'train': f('../data', train=True, download=False, transform=transform_train),
           'val': f('../data', train=False, download=False, transform=transform_test)}
 
-    x,y = th.tensor(ds['train'].data).float(), th.tensor(ds['train'].targets).long()
-    xv,yv = th.tensor(ds['val'].data).float(), th.tensor(ds['val'].targets).long()
-
-    if shuffle == True:
-        idx = th.randperm(len(y))
-        x = x[idx]
-        y = y[idx]
-
-    if name == 'MNIST':
-        x, xv = x[:,:,:,None], xv[:,:,:,None]
-
-    x, xv = th.transpose(x, 1, 3), th.transpose(xv, 1, 3)
-
     # subsample the dataset, make sure it is balanced
     if sub_sample > 0:
+        y = th.tensor(ds['train'].targets).long()
         l = th.max(y)+1  # number of classes
         # number of samples each class
         ss = th.div(sub_sample, l, rounding_mode='trunc')
-        x = th.cat([x[(y == i).nonzero().view(-1)][:ss] for i in range(l)])
-        y = th.cat([y[(y == i).nonzero().view(-1)][:ss] for i in range(l)])
-
+        idxs = th.cat([th.where(y == i)[0][:ss] for i in range(l)])
+        ds['train'] = th.utils.data.Subset(ds['train'], idxs)
         if name == "MNIST":
-            xv = th.cat([xv[(yv == i).nonzero().view(-1)][:850]
-                        for i in range(l)])
-            yv = th.cat([yv[(yv == i).nonzero().view(-1)][:850]
-                        for i in range(l)])
-
-    ds = dict(x=x,y=y,xv=xv,yv=yv)
-    for k,v in ds.items():
-        if dev == 'cpu' and th.cuda.is_available():
-            ds[k] = ds[k].pin_memory()
-        else:
-            ds[k] = ds[k].to(dev)
+            yv = th.tensor(ds['test'].targets).long()
+            idxs = th.cat([th.where(y == i)[0][:850] for i in range(l)])
+            ds['test'] = th.utils.data.Subset(ds['test'], idxs)
     return ds
 
-
+    
 def relabel_data(ds, frac=1):
     ds_new = deepcopy(ds)
     dev = ds['y'].device

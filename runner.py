@@ -12,31 +12,34 @@ root = os.path.join('results', 'models', 'new')
 
 from fastcore.script import *
 
-def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2)):
+def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2)):
 
-    x, y = ds['x'], ds['y']
-    xv, yv = ds['xv'], ds['yv']
+    if np.max(fix_batch) == 0:
+        batch_sampler = None
+    else:
+        batch_sampler = th.utils.data.BatchSampler(fix_batch.flatten(), bs, False)
 
-    esteps = len(x) // bs
+    trainloader = th.utils.data.DataLoader(ds['train'], batch_size=bs, shuffle=True, num_workers=2, batch_sampler=batch_sampler)
+    testloader = th.utils.data.DataLoader(ds['val'], batch_size=bs, shuffle=False, num_workers=2)
 
     def helper(t):
         m.eval()
         with th.no_grad():
             # train error
             yh, f, e = [], [], []
-            for ii in th.chunk(th.arange(x.shape[0]), x.shape[0]//bs):
-                xx, yy = x[ii], y[ii]            
-                yh.append(F.log_softmax(m(xx), dim=1))
-                f.append(-th.gather(yh[-1], 1, yy.view(-1,1)))
-                e.append((yy != th.argmax(yh[-1], dim=1).long()).float())
+            for i, (x, y) in enumerate(trainloader):
+                x, y = x.to(dev), y.to(dev)
+                yh.append(F.log_softmax(m(x), dim=1))
+                f.append(-th.gather(yh[-1], 1, y.view(-1,1)))
+                e.append((y != th.argmax(yh[-1], dim=1).long()).float())
 
             # val error
             yvh, fv, ev = [], [], []
-            for ii in th.chunk(th.arange(xv.shape[0]), xv.shape[0]//bs):
-                xxv, yyv = xv[ii], yv[ii]
-                yvh.append(F.log_softmax(m(xxv), dim=1))
-                fv.append(-th.gather(yvh[-1], 1, yyv.view(-1,1)))
-                ev.append((yyv != th.argmax(yvh[-1], dim=1).long()).float())
+            for i, (xv, yv) in enumerate(testloader):
+                xv, yv = xv.to(dev), yv.to(dev)
+                yvh.append(F.log_softmax(m(xv), dim=1))
+                fv.append(-th.gather(yvh[-1], 1, yv.view(-1,1)))
+                ev.append((yv != th.argmax(yvh[-1], dim=1).long()).float())
 
             ss = dict(yh=yh, f=f, e=e, yvh=yvh, fv=fv, ev=ev)
             for k,_ in ss.items():
@@ -47,38 +50,33 @@ def fit(m, ds, T=int(1e5), bs=128, autocast=True, opt=None, sched=None, fix_batc
         return ss
 
     m.train()
-    iis = np.arange(x.shape[0])
     ss = []
     ss.append(helper(0))
-    for t in tqdm.tqdm(range(1, T+1)):
-        if np.max(fix_batch) == 0:
-            ii = np.random.choice(iis, bs)
+    for epoch in range(epochs):
+        for i, (x, y) in enumerate(trainloader):
+            x, y = x.to(dev), y.to(dev)
+
+            if not isinstance(sched, th.optim.lr_scheduler._LRScheduler):
+                lr = sched(epoch + (i+1) / len(trainloader))
+                opt.param_groups[0].update(lr=lr)
+
+            with th.autocast(enabled=autocast, device_type='cuda'):
+                m.zero_grad()
+                yyh = m(x)
+                yyh = F.log_softmax(yyh, dim=1)
+                f = -th.gather(yyh, 1, y.view(-1,1)).mean()
+                e = (y != th.argmax(yyh, dim=1).long()).float().mean()
+
+            f.backward()
+            opt.step()
+            if isinstance(sched, th.optim.lr_scheduler._LRScheduler):
+                sched.step()
+
+        if epoch < 20:
+            ss.append(helper(epoch*len(trainloader)))
         else:
-            ii = fix_batch[t]
-        xx, yy = x[ii], y[ii]
-
-        if not isinstance(sched, th.optim.lr_scheduler._LRScheduler):
-            lr = sched(t / esteps)
-            opt.param_groups[0].update(lr=lr)
-
-        with th.autocast(enabled=autocast, device_type='cuda'):
-            m.zero_grad()
-            yyh = m(xx)
-            yyh = F.log_softmax(yyh, dim=1)
-            f = -th.gather(yyh, 1, yy.view(-1,1)).mean()
-            e = (yy != th.argmax(yyh, dim=1).long()).float().mean()
-
-        f.backward()
-        opt.step()
-        if isinstance(sched, th.optim.lr_scheduler._LRScheduler):
-            sched.step()
-
-        if t < esteps*25:
-            if t % esteps == 0:
-                ss.append(helper(t))
-        else:
-            if t %(20*esteps) == 0 or (t == T):
-                ss.append(helper(t))
+            if epochs % 20 == 0 or (epoch == epochs-1):
+                ss.append(helper(epoch*len(trainloader)))
     return ss
 
 
@@ -92,7 +90,7 @@ def main():
                         default='./configs/model/convmixer-256-8-5-2.yaml',
                         help='model name, model aruguments, batch normalization')
     parser.add_argument('--optim-args', '-o', type=str, 
-                        default='./configs/optim/adamw-500-convmixer.yaml',
+                        default='./configs/optim/adamw-500.yaml',
                         help='batch size, batch seed, learning rate, optimizer, weight decay')
     parser.add_argument('--init-args', '-i', type=str, 
                         default='./configs/init/normal.yaml',
@@ -122,15 +120,16 @@ def main():
     print(fn)
 
     setup(2)
-    ds = get_data(data_args, dev=dev)
-    T = args.epochs * ds['x'].shape[0] // args.bs
+    ds = get_data(data_args)
+    N_train = len(ds['train'])
+    T = args.epochs * N_train // args.bs
     optim_args['T'] = T
 
     if args.batch_seed < 0:
         fix_batch = np.zeros(2)
     else:
         setup(args.batch_seed)
-        fix_batch = np.random.randint(ds['x'].shape[0], size=(T, args.bs))
+        fix_batch = np.random.randint(N_train, size=(T, args.bs))
 
     setup(args.seed)
 
@@ -138,7 +137,7 @@ def main():
     optimizer, scheduler = get_opt(optim_args, m)
 
     m = get_init(init_args, m)
-    ss = fit(m, ds, T=T, bs=optim_args['bs'], autocast=optim_args['autocast'], opt=optimizer, sched=scheduler, fix_batch=fix_batch)
+    ss = fit(m, ds, epochs=args.epochs, bs=optim_args['bs'], autocast=optim_args['autocast'], opt=optimizer, sched=scheduler, fix_batch=fix_batch)
 
     th.save({"data": ss, "configs": args}, os.path.join(root, fn+'.p'))
 

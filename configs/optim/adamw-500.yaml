@@ -11,4 +11,4 @@ scheduler: "cosine_with_warmup"
 sched_args:
   cycle_mult: 1
   warmup_steps: 10
-  gamma: 0.01
+  gamma: 0.1
