@@ -1,9 +1,6 @@
 import torch as th
 import numpy as np
-import torch.autograd as autograd
 
-import os, json
-import glob
 import pandas as pd
 from scipy.interpolate import interpn
 from utils import get_data
@@ -25,18 +22,23 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
                 d[k] = d.apply(lambda r: np.exp(r[k]), axis=1)
                    
         if bootstrap:
-            idxs = d.groupby(groupby).indices
-            configs = np.repeat(np.stack(iter(idxs.keys())), n, axis=0)
-            avg = pd.DataFrame(configs, columns=groupby)
-
+            idxs = d[d['t'] == 0].groupby(groupby).indices
             m, n = len(idxs), len(next(iter(idxs.values())))
+            T = len(d['t'].unique())
             bsidxs = np.random.randint(n, size=[m*n, n])
-            bsidxs = np.take(np.stack(iter(idxs.values())), bsidxs)
-            data = {'avg_idxs': [*bsidxs]}
+            bsidxs = np.take(T*np.stack(list(idxs.values())), bsidxs)
+            avg_idxs = np.repeat(np.take(np.stack(d['seed']), bsidxs), T, axis=0)
+            bsidxs = np.repeat(bsidxs, T, axis=0) + np.tile(np.arange(T), len(bsidxs))[:, None]
+
+            all_idxs = d.groupby(groupby).indices
+            configs = np.tile(np.stack(list(all_idxs.keys())), (n, 1))
+            avg = pd.DataFrame(configs, columns=groupby)
+            data = {'avg_idxs': [*avg_idxs]}
             for k in keys:
                 yhs = np.take(np.stack(d[k]), bsidxs, axis=0).mean(1)
                 data[k] = [*yhs]
-            avg = avg.assign(data)
+            avg = avg.assign(**data)
+            avg['avg_idxs'] = avg.apply(lambda r: tuple(r['avg_idxs']), axis=1)
         else:
             avg = d.groupby(groupby)[keys].mean(numeric_only=False).reset_index()
 
@@ -46,13 +48,13 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
 
     if get_err:
         for k in keys:
-            ykey = k.strip("h")
-            y = get_data(dev='cuda')[ykey]
+            ykey = 'train' if k == 'yh' else 'val'
+            y = th.tensor(get_data()[ykey].targets).long().to(dev)
             n = len(y)
             out = np.stack(avg[k])
             preds = np.argmax(out, -1)
-            err = ((th.Tensor(preds).cuda() != y).sum(1) / n).cpu().numpy()
-            avg[f'{ykey[1:]}err'] = err
+            err = ((th.tensor(preds).to(dev) != y).sum(1) / n).cpu().numpy()
+            avg[f'{ykey}_err'] = err
 
 
     if compute_distance:
@@ -87,7 +89,9 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
 def interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=['yh', 'yvh'], dev='cuda'):
     r = []
     N = len(pts)
-    y = get_data(dev=dev)
+    y = get_data()
+    y = {'y': th.tensor(y['train'].targets).long().to(dev), 
+         'yh': th.tensor(y['val'].targets).long().to(dev)}
     configs = d.groupby(columns).indices
     for (c, idx) in configs.items():
         traj_interp = {}

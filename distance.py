@@ -1,3 +1,4 @@
+from ensurepip import bootstrap
 import os
 import torch as th
 import numpy as np
@@ -160,8 +161,9 @@ if __name__ == "__main__":
     batch = 2 
     symmetrize = 'min'
     normalization = 'length'
+    bootstrap = True
     loc = 'results/models/new'
-    fname = f'dist_{s}_{symmetrize}_{normalization}'
+    fname = f'dist_{s}_{symmetrize}_{normalization}_{bootstrap}'
 
     varying = {
         "bs": [200],
@@ -188,12 +190,18 @@ if __name__ == "__main__":
     print("loading model")
     d = load_d(loc, cond={**varying, **fixed}, avg_err=True, drop=False, probs=True)
 
-    d = avg_model(d, groupby=list(varying.keys()) + ['t'], probs=True, get_err=True,
+    d = avg_model(d, groupby=list(varying.keys()) + ['t'], probs=True, get_err=True, bootstrap=bootstrap,
                 update_d=True, compute_distance=False, dev='cuda')['d']
-    d = interpolate(d, ts, pts, columns=list(varying.keys()) + ['seed', 'avg'], keys=['yh'], dev='cuda')
+    columns = list(varying.keys()) + ['seed', 'avg']
+    if bootstrap:
+        columns += ['avg_idxs']
+    d = interpolate(d, ts, pts, columns=columns, keys=['yh'], dev='cuda')
 
     print("computing pairwise distance")
-    dists, configs = pairwise_dist_batch(d, groups=list(varying.keys()) + ['seed'], s=s, batch=batch, sym=symmetrize, normalization=normalization)
+    groups = list(varying.keys()) + ['seed']
+    if bootstrap:
+        groups += ['avg_idxs']
+    dists, configs = pairwise_dist_batch(d, groups=groups, s=s, batch=batch, sym=symmetrize, normalization=normalization)
     symd = dists
     symd[np.tril_indices(len(dists), -1)] = 0
     symd = symd+ symd.T
