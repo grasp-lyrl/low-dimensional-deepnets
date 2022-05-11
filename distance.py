@@ -76,7 +76,7 @@ def pairwise_dist(d, groupby=['m', 'opt', 'seed'], s=0.1, k='yh', sym='min', nor
     return dists, configs
 
 
-def dp2t_batch(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None):
+def dp2t_batch(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None, return_idxs=False):
     # xs: (npoints, num_samples, num_classes)
     # Y: (N, T, num_samples, num_classes)
     N, T = Y.shape[:2]
@@ -84,7 +84,9 @@ def dp2t_batch(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None):
     pdists = dbhat(xs, Y, reduction, dev)
     pdists = th.stack(th.split(pdists, T, 1), dim=1)
     if s == 0.0:
-        kdist, _ = pdists.min(-1)
+        kdist, idxs = pdists.min(-1)
+        if return_idxs:
+            return kdist, idxs
     else:
         if dys is None:
             dys = th.sqrt(th.diag(dbhat(Y, Y, reduction, dev), 1))

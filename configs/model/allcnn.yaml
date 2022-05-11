@@ -1,0 +1,7 @@
+---
+m: allcnn
+model_args:
+  num_classes: 10
+  c1: 96 
+  c2: 144
+  bn: True

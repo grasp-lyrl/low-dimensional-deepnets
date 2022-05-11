@@ -1,5 +1,5 @@
 ---
-name: "CIFAR10"
+data: "CIFAR10"
 aug: "full"
 aug_args:
   scale: 1.0

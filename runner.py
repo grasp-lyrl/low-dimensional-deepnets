@@ -2,10 +2,10 @@ import argparse
 from types import SimpleNamespace
 import torch as th
 import torch.nn.functional as F
-import torchvision as thv
+import numpy as np
+import tqdm, time, os, json
 
 from utils import *
-from networks import *
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
 root = os.path.join('results', 'models', 'new')
@@ -19,11 +19,12 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
     else:
         batch_sampler = th.utils.data.BatchSampler(fix_batch.flatten(), bs, False)
 
-    trainloader = th.utils.data.DataLoader(ds['train'], batch_size=bs, shuffle=True, num_workers=2, batch_sampler=batch_sampler)
-    testloader = th.utils.data.DataLoader(ds['val'], batch_size=bs, shuffle=False, num_workers=2)
+    trainloader = th.utils.data.DataLoader(ds['train'], batch_size=bs, shuffle=True, num_workers=0, batch_sampler=batch_sampler)
+    testloader = th.utils.data.DataLoader(ds['val'], batch_size=bs, shuffle=False, num_workers=0)
 
     def helper(t):
         m.eval()
+        start = time.time()
         with th.no_grad():
             # train error
             yh, f, e = [], [], []
@@ -44,21 +45,18 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
             ss = dict(yh=yh, f=f, e=e, yvh=yvh, fv=fv, ev=ev)
             for k,_ in ss.items():
                 ss[k] = th.cat(ss[k], dim=0).to('cpu')
-            print('[%06d] f: %2.3f, acc: %2.2f, fv: %2.3f, accv: %2.2f, lr: %2.4f'%
-                 (t, ss['f'].mean(), 100-ss['e'].mean()*100, ss['fv'].mean(), 100-ss['ev'].mean()*100, opt.param_groups[0]['lr']))
+            print('[%06d] f: %2.3f, acc: %2.2f, fv: %2.3f, accv: %2.2f, lr: %2.4f, time: %2.2f'% 
+                 (t, ss['f'].mean(), 100-ss['e'].mean()*100, ss['fv'].mean(), 100-ss['ev'].mean()*100, opt.param_groups[0]['lr'], time.time()-start))
         m.train()
         return ss
 
     m.train()
     ss = []
-    ss.append(helper(0))
-    for epoch in range(epochs):
+    t = 0
+    ss.append(helper(t))
+    for epoch in tqdm.tqdm(range(epochs)):
         for i, (x, y) in enumerate(trainloader):
             x, y = x.to(dev), y.to(dev)
-
-            if not isinstance(sched, th.optim.lr_scheduler._LRScheduler):
-                lr = sched(epoch + (i+1) / len(trainloader))
-                opt.param_groups[0].update(lr=lr)
 
             with th.autocast(enabled=autocast, device_type='cuda'):
                 m.zero_grad()
@@ -69,14 +67,14 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
 
             f.backward()
             opt.step()
-            if isinstance(sched, th.optim.lr_scheduler._LRScheduler):
-                sched.step()
+            sched.step()
+            t += 1
 
         if epoch < 20:
-            ss.append(helper(epoch*len(trainloader)))
+            ss.append(helper(t))
         else:
             if epochs % 20 == 0 or (epoch == epochs-1):
-                ss.append(helper(epoch*len(trainloader)))
+                ss.append(helper(t))
     return ss
 
 
@@ -87,27 +85,28 @@ def main():
                         default='./configs/data/cifar10-full.yaml', 
                         help='dataset name, augmentation')
     parser.add_argument('--model-args', '-m', type=str, 
-                        default='./configs/model/convmixer-256-8-5-2.yaml',
+                        default='./configs/model/convmixer.yaml',
                         help='model name, model aruguments, batch normalization')
     parser.add_argument('--optim-args', '-o', type=str, 
-                        default='./configs/optim/adamw-500-convmixer.yaml',
+                        default='./configs/optim/adam-200-0.001.yaml',
                         help='batch size, batch seed, learning rate, optimizer, weight decay')
     parser.add_argument('--init-args', '-i', type=str, 
                         default='./configs/init/normal.yaml',
                         help='start from corner')
 
     args = parser.parse_args()
+    seed = args.seed
 
     data_args = get_configs(args.data_args)
     model_args = get_configs(args.model_args)
     optim_args = get_configs(args.optim_args)
     init_args = get_configs(args.init_args)
 
-    args = SimpleNamespace(**{**vars(args), **data_args, **model_args, **optim_args, **init_args})
+    args = SimpleNamespace(**{**data_args, **model_args, **optim_args, **init_args})
     print(args)
 
     fn = json.dumps(
-        dict(seed=args.seed, 
+        dict(seed=seed, 
             batch_seed=args.batch_seed, 
             aug=args.aug,
             m=args.m, 
@@ -131,7 +130,7 @@ def main():
         setup(args.batch_seed)
         fix_batch = np.random.randint(N_train, size=(T, args.bs))
 
-    setup(args.seed)
+    setup(seed)
 
     m = get_model(model_args, dev=dev)
     optimizer, scheduler = get_opt(optim_args, m)

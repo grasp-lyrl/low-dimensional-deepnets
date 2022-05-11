@@ -1,25 +1,24 @@
 ---
-# models:
-#   - allcnn-96-144 
-#   - wr-10-4-8 
-#   - wr-16-4-64
-#   - fc-1024-512-256-128
-#   - convmixer-256-8
+models:
+  - allcnn-96-144 
+  - wr-10-4-8  
+  - wr-16-4-64
+  - fc-1024-512-256-128
+  - convmixer-256-8
+  - vit
 bs: 
   - 200
   - 500
   - 1000
-bn:
-  - False
-  - True
-# aug:
-#   - none
-#   - simple
-#   - full
+# bn:
+#   - False
+#   - True
+aug:
+  - none
+  - simple
 wd:
   - 0.0
-  - 0.01
-  - 0.00001
+  - 0.0001
 opts:
   - sgd-0.1-0.0
   - sgdn-0.1-0.9
