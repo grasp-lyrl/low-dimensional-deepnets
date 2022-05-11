@@ -26,13 +26,17 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
                    
         if bootstrap:
             idxs = d.groupby(groupby).indices
+            configs = np.repeat(np.stack(iter(idxs.keys())), n, axis=0)
+            avg = pd.DataFrame(configs, columns=groupby)
+
             m, n = len(idxs), len(next(iter(idxs.values())))
             bsidxs = np.random.randint(n, size=[m*n, n])
             bsidxs = np.take(np.stack(iter(idxs.values())), bsidxs)
-            yhs = np.take(np.stack(d[keys]), bsidxs, axis=0).mean(1)
-            configs = np.repeat(np.stack(iter(idxs.keys())), n, axis=0)
-            avg = pd.DataFrame(configs, columns=groupby)
-            avg = avg.assign(avg_idxs=[*bsidxs], yh=[*yhs])
+            data = {'avg_idxs': [*bsidxs]}
+            for k in keys:
+                yhs = np.take(np.stack(d[k]), bsidxs, axis=0).mean(1)
+                data[k] = [*yhs]
+            avg = avg.assign(data)
         else:
             avg = d.groupby(groupby)[keys].mean(numeric_only=False).reset_index()
 
