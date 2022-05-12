@@ -26,20 +26,22 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
             m, n = len(idxs), len(next(iter(idxs.values())))
             T = len(d['t'].unique())
             bsidxs = np.random.randint(n, size=[n, n])
-            # bsidxs = np.take(T*np.stack(list(idxs.values())), bsidxs)
+            # bsidxs = np.stack([np.random.choice(n, size=n, replace=False)
+            #          for _ in range(n)])
             bsidxs = np.take(T*np.stack(list(idxs.values())),bsidxs, axis=1).reshape(m*n, -1)
             avg_idxs = np.repeat(np.take(np.stack(d['seed']), bsidxs), T, axis=0)
             bsidxs = np.repeat(bsidxs, T, axis=0) + np.tile(np.arange(T), len(bsidxs))[:, None]
 
-            all_idxs = d.groupby(groupby).indices
-            configs = np.tile(np.stack(list(all_idxs.keys())), (n, 1))
+            # all_idxs = d.groupby(groupby).indices
+            # configs = np.tile(np.stack(list(all_idxs.keys())), (n, 1))
+            configs = np.take(np.stack(d[groupby].values), bsidxs, axis=0)[:, 0, :]
             avg = pd.DataFrame(configs, columns=groupby)
             data = {'avg_idxs': [*avg_idxs]}
             for k in keys:
                 yhs = np.take(np.stack(d[k]), bsidxs, axis=0).mean(1)
                 data[k] = [*yhs]
             avg = avg.assign(**data)
-            avg['avg_idxs'] = avg.apply(lambda r: tuple(r['avg_idxs']), axis=1)
+            avg['avg_idxs'] = avg.apply(lambda r: str(r['avg_idxs']), axis=1)
         else:
             avg = d.groupby(groupby)[keys].mean(numeric_only=False).reset_index()
 

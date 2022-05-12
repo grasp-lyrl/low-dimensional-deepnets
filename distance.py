@@ -1,5 +1,6 @@
 from ensurepip import bootstrap
 import os
+import argparse
 import torch as th
 import numpy as np
 from itertools import product
@@ -25,12 +26,14 @@ def dinpca(x1, x2, sign=1, dev='cuda', sqrt=False):
     return d
 
 
-def dp2t(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None):
+def dp2t(xs, Y, reduction='mean', dev='cuda', s=0.1, dys=None, return_idxs=False):
     # xs: (npoints, num_samples, num_classes)
     # Y: (T, num_samples, num_classes)
     pdists = dbhat(xs, Y, reduction, dev)
     if s == 0.0:
-        kdist, _ = pdists.min(1)
+        kdist, idxs = pdists.min(1)
+        if return_idxs:
+            return kdist, idxs
     else:
         if dys is None:
             dys = th.sqrt(th.diag(dbhat(Y, Y, reduction, dev), 1))
@@ -157,13 +160,22 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
 
 
 if __name__ == "__main__":
-    s = 0.0
-    batch = 2 
-    symmetrize = 'mean'
-    normalization = 'length'
-    bootstrap = True
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--s', type=float, default=0.0)
+    parser.add_argument('--batch', type=int, default=2)
+    parser.add_argument('--sym', type=str, default='mean')
+    parser.add_argument('--norm', type=str, default='length')
+    parser.add_argument('--bootstrap', action='store_true')
+    parser.add_argument('--interpolate', action='store_true')
+    args = parser.parse_args()
+
+
     loc = 'results/models/new'
-    fname = f'dist_{s}_{symmetrize}_{normalization}_{bootstrap}'
+    fname = f'dist_{args.s}_{args.sym}_{args.norm}'
+    if args.bootstrap:
+        fname += '_bootstrap'
+    if args.interpolate:
+        fname += '_interpolate'
 
     varying = {
         "bs": [200],
@@ -190,18 +202,19 @@ if __name__ == "__main__":
     print("loading model")
     d = load_d(loc, cond={**varying, **fixed}, avg_err=True, drop=False, probs=True)
 
-    d = avg_model(d, groupby=list(varying.keys()) + ['t'], probs=True, get_err=True, bootstrap=bootstrap,
+    d = avg_model(d, groupby=list(varying.keys()) + ['t'], probs=True, get_err=True, bootstrap=args.bootstrap,
                 update_d=True, compute_distance=False, dev='cuda')['d']
     columns = list(varying.keys()) + ['seed', 'avg']
-    if bootstrap:
+    if args.bootstrap:
         columns += ['avg_idxs']
-    d = interpolate(d, ts, pts, columns=columns, keys=['yh'], dev='cuda')
+    if args.interpolate:
+        d = interpolate(d, ts, pts, columns=columns, keys=['yh'], dev='cuda')
 
     print("computing pairwise distance")
     groups = list(varying.keys()) + ['seed'] # avg==True iff seed==-1
     if bootstrap:
         groups += ['avg_idxs']
-    dists, configs = pairwise_dist_batch(d, groups=groups, s=s, batch=batch, sym=symmetrize, normalization=normalization)
+    dists, configs = pairwise_dist_batch(d, groups=groups, s=args.s, batch=args.batch, sym=args.sym, normalization=args.norm)
     symd = dists
     symd[np.tril_indices(len(dists), -1)] = 0
     symd = symd+ symd.T
