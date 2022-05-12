@@ -78,6 +78,8 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
         avg['avg'] = True
         avg['seed'] = -1
         d['avg'] = False
+        if bootstrap:
+            d['avg_idxs'] = pd.Series([(-1, 0) for _ in range(len(d))])
         d = pd.concat([avg, d]).reset_index()
         d_return['d'] = d
     else:

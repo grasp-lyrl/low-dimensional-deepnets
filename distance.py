@@ -157,9 +157,9 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
 
 
 if __name__ == "__main__":
-    s = 0.1
+    s = 0.0
     batch = 2 
-    symmetrize = 'min'
+    symmetrize = 'mean'
     normalization = 'length'
     bootstrap = True
     loc = 'results/models/new'
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     d = interpolate(d, ts, pts, columns=columns, keys=['yh'], dev='cuda')
 
     print("computing pairwise distance")
-    groups = list(varying.keys()) + ['seed']
+    groups = list(varying.keys()) + ['seed'] # avg==True iff seed==-1
     if bootstrap:
         groups += ['avg_idxs']
     dists, configs = pairwise_dist_batch(d, groups=groups, s=s, batch=batch, sym=symmetrize, normalization=normalization)
