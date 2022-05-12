@@ -25,8 +25,9 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
             idxs = d[d['t'] == 0].groupby(groupby).indices
             m, n = len(idxs), len(next(iter(idxs.values())))
             T = len(d['t'].unique())
-            bsidxs = np.random.randint(n, size=[m*n, n])
-            bsidxs = np.take(T*np.stack(list(idxs.values())), bsidxs)
+            bsidxs = np.random.randint(n, size=[n, n])
+            # bsidxs = np.take(T*np.stack(list(idxs.values())), bsidxs)
+            bsidxs = np.take(T*np.stack(list(idxs.values())),bsidxs, axis=1).reshape(m*n, -1)
             avg_idxs = np.repeat(np.take(np.stack(d['seed']), bsidxs), T, axis=0)
             bsidxs = np.repeat(bsidxs, T, axis=0) + np.tile(np.arange(T), len(bsidxs))[:, None]
 
