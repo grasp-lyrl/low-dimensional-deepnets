@@ -5,7 +5,18 @@ import pandas as pd
 from scipy.interpolate import interpn
 from utils import get_data
 
+def projection(r, p, q, debug=False):
+    # r, p, q shape (npoints, ndim)
+    if debug:
+        assert np.allclose((r**2).sum(1), (p**2).sum(1), (q**2).sum(1), 1)
+    cost, cost1, cost2 = (p*q).sum(1), (p*r).sum(1), (q*r).sum(1)
+    tan = cost2/(cost1*np.sqrt(1-cost**2)) - cost / np.sqrt(1-cost**2)
+    lam = (np.arctan(tan) * (tan > 0)) / np.arccos(cost)
+    lam[lam > 1] = 1
+    return lam
 
+def proj_geodesic(d, y):
+    pass
 
 def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get_err=True, update_d=False, keys=['yh', 'yvh'],
               compute_distance=False, dev='cuda', distf=lambda x, y: th.cdist(x, y).mean(0)):

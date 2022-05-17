@@ -9,17 +9,22 @@ def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
 
 
-def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True, keys=['yh', 'yvh']):
+def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['yh', 'yvh']):
     r = []
     for f in glob.glob(os.path.join(loc, '*}.p')):
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         if all(configs[k] in v for (k, v) in cond.items()):
             d = th.load(f)
-            for i in range(len(d)):
+            if isinstance(d, dict):
+                d = d['data']
+            print(f, len(d))
+            ts = list(range(0, 20))+list(range(20, 200, 20))+[200] if len(d) == 201 else range(len(d))
+            # for i in range(len(d)):
+            for i in range(len(ts)):
                 t = {}
                 t.update(configs)
-                t.update({'t': i})
-                t.update(d[i])
+                t.update({'t': i / len(ts)})
+                t.update(d[ts[i]])
                 r.append(t)
 
     d = pd.DataFrame(r)
@@ -36,7 +41,7 @@ def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=True, keys
             d[k] = d.apply(lambda r: r[k].numpy(), axis=1)
 
     if drop:
-        d = drop_untrained(d, key='err', th=0.01, verbose=False).reset_index()
+        d = drop_untrained(d, key='err', th=drop, verbose=False).reset_index()
 
     print(d.keys(), len(d))
     del r

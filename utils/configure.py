@@ -31,13 +31,18 @@ def get_configs(fname):
     return configs
 
 
+def save_configs(c, fname):
+    with open(fname, 'w') as f:
+        yaml.safe_dump(c, f)
+
+
 def get_model(model_args, dev='cpu'):
     m, model_args = model_args['m'], model_args['model_args']
     return getattr(networks, m)(**model_args).to(dev)
 
 
 def get_opt(optim_args, model):
-    opt, opt_args = optim_args['optimizer'], optim_args['opt_args']
+    opt, opt_args = optim_args['opt'], optim_args['opt_args']
     optimizer = getattr(th.optim, opt)(model.parameters(), **opt_args)
 
     sched, sched_args = optim_args['scheduler'], optim_args['sched_args']

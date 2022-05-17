@@ -30,7 +30,7 @@ def embed(dd, fn='', ss=slice(0,-1,1), probs=False, ne=3, key='yh', force=False,
         w = th.load(os.path.join(loc, 'w_%s.p' % fn))
 
     l = np.eye(w.shape[0]) - 1.0/w.shape[0]
-    w = -l @ w @ l / 2 # save column & row sums, add back and check.
+    w = -l @ w @ l / 2 
     r = proj_(w, n, ne)
     th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return
@@ -50,7 +50,7 @@ def dist_(xs, probs=True, dev='cuda', distf='bhat', reduction='sum', chunks=200)
         aa = aa.to(dev)
         if distf == 'bhat':
             aa = th.sqrt(aa)
-            w_ = -8*th.log(th.bmm(aa, aa.transpose(1, 2)))
+            w_ = -th.log(th.bmm(aa, aa.transpose(1, 2)))
             w_[w_ == th.inf] = 100
             w_[w_ < 0] = 0
             w += w_.sum(0).cpu().numpy()
@@ -74,7 +74,7 @@ def dist_(xs, probs=True, dev='cuda', distf='bhat', reduction='sum', chunks=200)
                 w2 = (th.exp(aa) * aa).sum(-1, keepdim=True) - th.bmm(aa, th.exp(aa).transpose(1, 2))
                 w_ = 0.5*(w1+w2)
     if reduction == 'mean':
-        w = w/n
+        w = w/xs.size(0)
     return w
 
 def proj_(w, n, ne):
@@ -106,35 +106,40 @@ def main():
     # import torch.nn.functional as F
     # true = pd.Series(dict(m='true', yh=F.one_hot(data['y']), yvh=F.one_hot(data['yv'])))
     # d = d.append(true, ignore_index=True)
-    models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
-    opts = ["adam", "sgdn", "sgd"]
+    models = ["vit", "wr-10-4-8", "wr-4-8"]
+    # opts = ["SGD", "Adam"]
+    # models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
+    opts = ["adam", "sgdn", "adam-200-0.01-0.00001",
+            "sgdn-200-0.1-0.0", "sgdn-200-0.01-0.0"]
     loc = 'results/models/new'
-    d = load_d(loc, cond={'bs': [200], 'aug': [True], 'wd': [0.0], 'bn': [True], 'm': models, 'opt': opts},
-            avg_err=True, drop=True, probs=True)
-    T = 45000
-    ts = []
-    for t in range(T):
-        if t < T//10:
-            if t % (T//100) == 0:
-                ts.append(t)
-        else:
-            if t % (T//10) == 0 or (t == T-1):
-                ts.append(t)
-    pts = np.concatenate(
-        [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
-    ts = np.expand_dims(np.array(ts), 0)
-    d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
-                      update_d=True, compute_distance=False, dev='cpu')['d']
-    d = interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=[
-                    'yh', 'yvh'], dev='cpu')
+    d = load_d(loc, cond={'aug': [True,"simple"], 'm': models, 'opt':opts, 'seed':[42]},
+            avg_err=True, drop=0.0, probs=True)
+
+    # T = 45000
+    # ts = []
+    # for t in range(T):
+    #     if t < T//10:
+    #         if t % (T//100) == 0:
+    #             ts.append(t)
+    #     else:
+    #         if t % (T//10) == 0 or (t == T-1):
+    #             ts.append(t)
+    # pts = np.concatenate(
+    #     [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
+    # ts = np.expand_dims(np.array(ts), 0)
+    # d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
+    #                   update_d=True, compute_distance=False, dev='cpu')['d']
+    # d = interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=[
+    #                 'yh', 'yvh'], dev='cpu')
     
     for key in ['yh', 'yvh']:
         # fn = f'{key}_new_subset_{i}_{iv}'
         # idxs = th.load(os.path.join(loc, f'{key}_idx.p'))
         # ss = i if key == 'yh' else iv
-        fn = f'{key}_new_interpolate_with_avg'
-        idx = ['seed', 'm', 'opt', 't', 'err', 'verr', 'favg', 'vfavg', 'avg']
-        embed(d, fn=fn, ss=slice(0, -1, 4), probs=True, key=key,
+        fn = f'{key}_new_vit'
+        idx = ['seed', 'm', 'opt', 't', 'err', 'verr', 'favg', 'vfavg']
+        print(d['m'].unique())
+        embed(d, fn=fn, ss=slice(0, -1, 1), probs=True, key=key,
               idx=idx, force=True, distf='bhat', reduction='mean')
 
 
