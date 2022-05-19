@@ -78,8 +78,8 @@ def avg_model(d, groupby=['m', 't'], probs=False, avg=None, bootstrap=False, get
             config = tuple(avg.iloc[i][groupby])
             ii = indices[config]
             for k in keys:
-                x1 = th.Tensor(avg.iloc[i][k]).unsqueeze(0).transpose(0, 1).to(dev)
-                x2 = th.Tensor(np.stack(d.iloc[ii][k])).transpose(0, 1).to(dev)
+                x1 = th.Tensor(avg.iloc[i][k]).unsqueeze(0).to(dev)
+                x2 = th.Tensor(np.stack(d.iloc[ii][k])).to(dev)
                 dist = distf(x2, x1)
                 for (j, dj) in enumerate(dist):
                     dic = dict(dist=dj.item(), key=k)
