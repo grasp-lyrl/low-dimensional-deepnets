@@ -9,7 +9,7 @@ def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
 
 
-def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['yh', 'yvh']):
+def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['yh', 'yvh'], verbose=False):
     r = []
     for f in glob.glob(os.path.join(loc, '*}.p')):
         configs = json.loads(f[f.find('{'):f.find('}')+1])
@@ -17,7 +17,8 @@ def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['
             d = th.load(f)
             if isinstance(d, dict):
                 d = d['data']
-            print(f, len(d))
+            if verbose:
+                print(f, len(d))
             ts = list(range(0, 20))+list(range(20, 200, 20))+[200] if len(d) == 201 else range(len(d))
             # for i in range(len(d)):
             for i in range(len(ts)):
