@@ -106,40 +106,46 @@ def main():
     # import torch.nn.functional as F
     # true = pd.Series(dict(m='true', yh=F.one_hot(data['y']), yvh=F.one_hot(data['yv'])))
     # d = d.append(true, ignore_index=True)
-    models = ["vit", "wr-10-4-8", "wr-4-8"]
-    # opts = ["SGD", "Adam"]
-    # models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
-    opts = ["adam", "sgdn", "adam-200-0.01-0.00001",
-            "sgdn-200-0.1-0.0", "sgdn-200-0.01-0.0"]
+    # models = ["vit", "wr-10-4-8", "wr-4-8"]
+    opts = ["adam", "sgd", "sgdn"]
+    models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
+    # opts = ["adam", "sgdn", "adam-200-0.01-0.00001",
+    #         "sgdn-200-0.1-0.0", "sgdn-200-0.01-0.0"]
     loc = 'results/models/new'
-    d = load_d(loc, cond={'aug': [True,"simple"], 'm': models, 'opt':opts, 'seed':[42]},
+    # d = th.load(os.path.join(loc, 'new_avg.p'))
+    # d['yh'] = d.apply(lambda r: r.yh.squeeze(), axis=1)
+    # d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
+    #                 update_d=True, compute_distance=False, dev='cuda', keys=['yh'])['d']
+    d = load_d(loc, cond={'aug': [True], 'm': models, 'opt':opts, 'bn': [True], 'bs':[200], 'wd':[0.0]},
             avg_err=True, drop=0.0, probs=True)
-
-    # T = 45000
-    # ts = []
-    # for t in range(T):
-    #     if t < T//10:
-    #         if t % (T//100) == 0:
-    #             ts.append(t)
-    #     else:
-    #         if t % (T//10) == 0 or (t == T-1):
-    #             ts.append(t)
-    # pts = np.concatenate(
-    #     [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
-    # ts = np.expand_dims(np.array(ts), 0)
+    T = 45000
+    ts = []
+    for t in range(T):
+        if t < T//10:
+            if t % (T//100) == 0:
+                ts.append(t)
+        else:
+            if t % (T//10) == 0 or (t == T-1):
+                ts.append(t)
+    pts = np.concatenate(
+        [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
+    ts = np.expand_dims(np.array(ts), 0)
     # d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
     #                   update_d=True, compute_distance=False, dev='cpu')['d']
     # d = interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=[
     #                 'yh', 'yvh'], dev='cpu')
+    # d = interpolate(d, ts, pts, columns=['seed', 'm', 'opt'], keys=[
+    #                 'yh', 'yvh'], dev='cpu')
     
+    # for key in ['yh', 'yvh']:
     for key in ['yh', 'yvh']:
         # fn = f'{key}_new_subset_{i}_{iv}'
         # idxs = th.load(os.path.join(loc, f'{key}_idx.p'))
         # ss = i if key == 'yh' else iv
-        fn = f'{key}_new_vit'
-        idx = ['seed', 'm', 'opt', 't', 'err', 'verr', 'favg', 'vfavg']
+        fn = f'{key}_new_all_bn'
+        idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'bs', 'aug', 'bn']
         print(d['m'].unique())
-        embed(d, fn=fn, ss=slice(0, -1, 1), probs=True, key=key,
+        embed(d, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
               idx=idx, force=True, distf='bhat', reduction='mean')
 
 

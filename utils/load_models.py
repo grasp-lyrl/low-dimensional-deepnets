@@ -19,13 +19,11 @@ def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['
                 d = d['data']
             if verbose:
                 print(f, len(d))
-            ts = list(range(0, 20))+list(range(20, 200, 20))+[200] if len(d) == 201 else range(len(d))
-            # for i in range(len(d)):
-            for i in range(len(ts)):
+            for i in range(len(d)):
                 t = {}
                 t.update(configs)
-                t.update({'t': i / len(ts)})
-                t.update(d[ts[i]])
+                t.update({'t': i})
+                t.update(d[i])
                 r.append(t)
 
     d = pd.DataFrame(r)
