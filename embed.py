@@ -11,6 +11,7 @@ import tqdm
 import pandas as pd
 
 from utils import *
+import distance
 
 def embed(dd, fn='', ss=slice(0,-1,1), probs=False, ne=3, key='yh', force=False, idx=None, dev='cuda', distf='bhat', 
           reduction='sum', loc='inpca_results'):
@@ -35,7 +36,25 @@ def embed(dd, fn='', ss=slice(0,-1,1), probs=False, ne=3, key='yh', force=False,
     th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return
 
+
+# Calculate the embedding of a distibution q in the intensive embedding of models p_list with divergence=distance, supply d_list the precalculated matrix of distances pf p_list.
+def lazy_embed(q, ps, w, evals=None, evecs=None, distf='dbhat', ne=3):
+    N, _ = ps.shape
+    dp = getattr(distance, distf)(q, ps)
+    P = np.eye(N)-1.0/N
+    d_mean = np.mean(w, 0)
+    d_mean_mean = np.mean(w)
+    dist_list = -.5*np.matmul(P, np.matmul(dist_list, P))
+    if not evals or not evecs:
+        _, _, evals, evecs = proj_(dist_list, N, ne) 
+    dp_mean = dp-np.mean(dp)-d_mean+d_mean_mean
+    dp_mean = -.5*dp_mean  
+    sqrtsigma = np.sqrt(np.abs(evals))
+    return ((1/sqrtsigma)*np.matmul(dp_mean, evecs))
+
+
 def dist_(xs, probs=True, dev='cuda', distf='bhat', reduction='sum', chunks=200):
+    # compute pairwise distance between all elements of xs
     if not isinstance(xs, th.Tensor):
         xs = th.Tensor(xs)
     # xs = xs.to(dev)
@@ -106,9 +125,10 @@ def main():
     # import torch.nn.functional as F
     # true = pd.Series(dict(m='true', yh=F.one_hot(data['y']), yvh=F.one_hot(data['yv'])))
     # d = d.append(true, ignore_index=True)
-    # models = ["vit", "wr-10-4-8", "wr-4-8"]
-    opts = ["adam", "sgd", "sgdn"]
-    models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
+    models = ["ViT", "convmixer", "wide_resnet"]
+    opts = ["Adam", "SGD"]
+    # opts = ["adam", "sgd", "sgdn"]
+    # models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
     # opts = ["adam", "sgdn", "adam-200-0.01-0.00001",
     #         "sgdn-200-0.1-0.0", "sgdn-200-0.01-0.0"]
     loc = 'results/models/new'
@@ -116,7 +136,7 @@ def main():
     # d['yh'] = d.apply(lambda r: r.yh.squeeze(), axis=1)
     # d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
     #                 update_d=True, compute_distance=False, dev='cuda', keys=['yh'])['d']
-    d = load_d(loc, cond={'aug': [True], 'm': models, 'opt':opts, 'bn': [True], 'bs':[200], 'wd':[0.0]},
+    d = load_d(loc, cond={'aug': ["simple"], 'm': models, 'opt':opts, 'bn': [True], 'seed':[42]},
             avg_err=True, drop=0.0, probs=True)
     T = 45000
     ts = []
@@ -142,7 +162,7 @@ def main():
         # fn = f'{key}_new_subset_{i}_{iv}'
         # idxs = th.load(os.path.join(loc, f'{key}_idx.p'))
         # ss = i if key == 'yh' else iv
-        fn = f'{key}_new_all_bn'
+        fn = f'{key}_more_ckpts'
         idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'bs', 'aug', 'bn']
         print(d['m'].unique())
         embed(d, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
