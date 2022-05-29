@@ -13,40 +13,51 @@ import pandas as pd
 from utils import *
 import distance
 
-def embed(dd, fn='', ss=slice(0,-1,1), probs=False, ne=3, key='yh', force=False, idx=None, dev='cuda', distf='bhat', 
-          reduction='sum', loc='inpca_results'):
+def embed(dd, extra_pts=None, fn='', ss=slice(0,None,1), probs=False, ne=3, key='yh', force=False, idx=None, dev='cuda', distf='dbhat', 
+          reduction='sum', loc='inpca_results', chunks=1):
     idx = idx or ['seed', 'widen', 'numc', 't', 'err', 'verr', 'favg', 'vfavg']
     dc = dd[idx]
+    if extra_pts is not None:
+        qc = extra_pts.loc[:, extra_pts.columns.isin(idx)] 
+        dc = pd.concat([dc, qc])
     th.save(dc, os.path.join(loc, 'didx_%s.p' % fn))
     n = len(dd) # number of models
 
     x = th.Tensor(np.stack([dd.iloc[i][key][ss] for i in range(n)])).cpu()
+    q = th.Tensor(np.stack([extra_pts.iloc[i][key][ss] for i in range(len(extra_pts))])).cpu()
 
     if (not os.path.isfile(os.path.join(loc, 'w_%s.p' % fn))) or force:
-        w = dist_(x, probs=probs, dev=dev, distf=distf, reduction=reduction)
+        if 'kl' in distf:
+            w = getattr(distance, distf)(x, x, reduction=reduction, dev=dev, chunks=chunks, probs=probs)
+        else:
+            x = th.exp(x) if not probs else x
+            w = getattr(distance, distf)(x, x, reduction=reduction, dev=dev, chunks=chunks)
+        # w = dist_(x, probs=probs, dev=dev, distf=distf, reduction=reduction)
         print('Saving w')
         th.save(w, os.path.join(loc, 'w_%s.p' % fn))
     else:
         print('Found: ', os.path.join(loc, 'w_%s.p' % fn))
         w = th.load(os.path.join(loc, 'w_%s.p' % fn))
 
+    d_mean = w.mean(0)
     l = np.eye(w.shape[0]) - 1.0/w.shape[0]
     w = -l @ w @ l / 2 
     r = proj_(w, n, ne)
+    if extra_pts is not None:
+        q = lazy_embed(q, x, w, d_mean, evals=r['e'], evecs=r['v'], distf=distf, ne=ne)
+        r['xp'] = np.vstack([r['xp'], q]) 
     th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return
 
 
 # Calculate the embedding of a distibution q in the intensive embedding of models p_list with divergence=distance, supply d_list the precalculated matrix of distances pf p_list.
-def lazy_embed(q, ps, w, evals=None, evecs=None, distf='dbhat', ne=3):
-    N, _ = ps.shape
-    dp = getattr(distance, distf)(q, ps)
-    P = np.eye(N)-1.0/N
-    d_mean = np.mean(w, 0)
-    d_mean_mean = np.mean(w)
-    dist_list = -.5*np.matmul(P, np.matmul(dist_list, P))
-    if not evals or not evecs:
-        _, _, evals, evecs = proj_(dist_list, N, ne) 
+def lazy_embed(q, ps, w, d_mean, evals=None, evecs=None, distf='dbhat', ne=3, chunks=1):
+    # w: centered pairwise distance, d_mean: mean before centering
+    N, _, _ = ps.shape
+    dp = getattr(distance, distf)(q, ps, chunks=chunks)
+    d_mean_mean = np.mean(d_mean)
+    if (evals is not None) or (evecs is not None):
+        _, _, evals, evecs = proj_(w, N, ne).values() 
     dp_mean = dp-np.mean(dp)-d_mean+d_mean_mean
     dp_mean = -.5*dp_mean  
     sqrtsigma = np.sqrt(np.abs(evals))
@@ -138,18 +149,18 @@ def main():
     #                 update_d=True, compute_distance=False, dev='cuda', keys=['yh'])['d']
     d = load_d(loc, cond={'aug': ["simple"], 'm': models, 'opt':opts, 'bn': [True], 'seed':[42]},
             avg_err=True, drop=0.0, probs=True)
-    T = 45000
-    ts = []
-    for t in range(T):
-        if t < T//10:
-            if t % (T//100) == 0:
-                ts.append(t)
-        else:
-            if t % (T//10) == 0 or (t == T-1):
-                ts.append(t)
-    pts = np.concatenate(
-        [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
-    ts = np.expand_dims(np.array(ts), 0)
+    # T = 45000
+    # ts = []
+    # for t in range(T):
+    #     if t < T//10:
+    #         if t % (T//100) == 0:
+    #             ts.append(t)
+    #     else:
+    #         if t % (T//10) == 0 or (t == T-1):
+    #             ts.append(t)
+    # pts = np.concatenate(
+    #     [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
+    # ts = np.expand_dims(np.array(ts), 0)
     # d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
     #                   update_d=True, compute_distance=False, dev='cpu')['d']
     # d = interpolate(d, ts, pts, columns=['seed', 'm', 'opt', 'avg'], keys=[
@@ -158,15 +169,27 @@ def main():
     #                 'yh', 'yvh'], dev='cpu')
     
     # for key in ['yh', 'yvh']:
+    data = get_data()
+    y, yv = th.tensor(data['train'].targets).long(), th.tensor(data['val'].targets).long()
+    y_ = np.zeros((len(y), y.max()+1))
+    y_[np.arange(len(y)), y] = 1
+    yv_ = np.zeros((len(yv), yv.max()+1))
+    yv_[np.arange(len(yv)), yv] = 1
+    extra_pts = [dict(seed=0, m='true', t=th.inf, err=0., verr=0., yh=y_, yvh=yv_), 
+                dict(seed=0, m='random', t=0, err=0.9, verr=0.9, 
+                yh=np.ones([len(y), y.max()+1])/(y.max()+1), 
+                yvh=np.ones([len(yv), yv.max()+1])/(yv.max()+1))
+                ]
+    extra_pts = pd.DataFrame(extra_pts)
     for key in ['yh', 'yvh']:
         # fn = f'{key}_new_subset_{i}_{iv}'
         # idxs = th.load(os.path.join(loc, f'{key}_idx.p'))
         # ss = i if key == 'yh' else iv
-        fn = f'{key}_more_ckpts'
+        fn = f'{key}_more_ckpts_with_ends'
         idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'bs', 'aug', 'bn']
         print(d['m'].unique())
-        embed(d, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
-              idx=idx, force=True, distf='bhat', reduction='mean')
+        embed(d, extra_pts=extra_pts, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
+              idx=idx, force=True, distf='dbhat', reduction='mean', chunks=200)
 
 
 if __name__ == '__main__':

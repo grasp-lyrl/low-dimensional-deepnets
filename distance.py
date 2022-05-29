@@ -5,6 +5,7 @@ import torch as th
 import numpy as np
 from itertools import product
 from functools import partial
+import tqdm
 from utils import load_d, avg_model, interpolate
 
 
@@ -17,7 +18,7 @@ def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0):
     if debug:
         assert th.allclose(x1.sum(-1), th.ones(ns, np1).to(dev)) and th.allclose(x2.sum(-1), th.ones(ns, np2).to(dev))
     chunks = chunks or 1
-    for aa in th.chunk(th.arange(ns), chunks):
+    for aa in tqdm.tqdm(th.chunk(th.arange(ns), chunks)):
         xx1 = x1[aa, :].to(dev)
         xx2 = x2[aa, :].to(dev)
         aa = th.sqrt(aa)
