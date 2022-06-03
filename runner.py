@@ -8,7 +8,7 @@ import tqdm, time, os, json
 from utils import *
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
-root = os.path.join('results', 'models', 'new')
+root = os.path.join('results', 'models', 'test2')
 
 from fastcore.script import *
 
@@ -70,11 +70,15 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
             opt.step()
             sched.step()
             t += 1
+            if epoch < 5 and i % (len(trainloader) // 4) == 0:
+                ss.append(helper(t))
 
-        if epoch <= 20:
+        if 5 <= epoch <= 25:
+            ss.append(helper(t))
+        elif 25 < epoch <= 65 and epoch % 5 == 0:
             ss.append(helper(t))
         else:
-            if epoch % 20 == 0 or (epoch == epochs-1):
+            if epoch % 15 == 0 or (epoch == epochs-1):
                 ss.append(helper(t))
     return ss
 
@@ -111,8 +115,12 @@ def main():
             bseed=args.batch_seed, 
             aug=args.aug,
             m=os.path.basename(args.model_config)[:-5], 
-            opt=os.path.basename(args.optim_config)[:-5],
-            corner=args.corner)
+            bn=args.model_args['bn'],
+            drop=args.model_args['dropout_rate'],
+            opt=os.path.basename(args.optim_config).split('-')[0],
+            bs=args.bs,
+            lr=args.opt_args['lr'],
+            wd=args.opt_args['weight_decay'])
     ).replace(' ', '')
     print(fn)
 

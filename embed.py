@@ -20,11 +20,11 @@ def embed(dd, extra_pts=None, fn='', ss=slice(0,None,1), probs=False, ne=3, key=
     if extra_pts is not None:
         qc = extra_pts.loc[:, extra_pts.columns.isin(idx)] 
         dc = pd.concat([dc, qc])
+        q = th.Tensor(np.stack([extra_pts.iloc[i][key][ss] for i in range(len(extra_pts))])).cpu()
     th.save(dc, os.path.join(loc, 'didx_%s.p' % fn))
     n = len(dd) # number of models
 
     x = th.Tensor(np.stack([dd.iloc[i][key][ss] for i in range(n)])).cpu()
-    q = th.Tensor(np.stack([extra_pts.iloc[i][key][ss] for i in range(len(extra_pts))])).cpu()
 
     if (not os.path.isfile(os.path.join(loc, 'w_%s.p' % fn))) or force:
         if 'kl' in distf:
@@ -124,7 +124,7 @@ def proj_(w, n, ne):
 
 def main():
     dev = 'cuda'
-    loc = 'results/models/new'
+    loc = 'results/models/test2'
 
     # d = pd.read_pickle(os.path.join(loc, "all_models.pkl"))
     # d['avg'] = False
@@ -136,18 +136,16 @@ def main():
     # import torch.nn.functional as F
     # true = pd.Series(dict(m='true', yh=F.one_hot(data['y']), yvh=F.one_hot(data['yv'])))
     # d = d.append(true, ignore_index=True)
-    models = ["ViT", "convmixer", "wide_resnet"]
-    opts = ["Adam", "SGD"]
+    models = ["wr-10-4-8"]
+    # opts = ["Adam", "SGD"]
     # opts = ["adam", "sgd", "sgdn"]
     # models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
-    # opts = ["adam", "sgdn", "adam-200-0.01-0.00001",
-    #         "sgdn-200-0.1-0.0", "sgdn-200-0.01-0.0"]
-    loc = 'results/models/new'
+    opts = ["adam", "sgd", "sgdn"]
     # d = th.load(os.path.join(loc, 'new_avg.p'))
     # d['yh'] = d.apply(lambda r: r.yh.squeeze(), axis=1)
     # d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
     #                 update_d=True, compute_distance=False, dev='cuda', keys=['yh'])['d']
-    d = load_d(loc, cond={'aug': ["simple"], 'm': models, 'opt':opts, 'bn': [True], 'seed':[42]},
+    d = load_d(loc, cond={'aug': ["simple"], 'm': models, 'opt':opts},
             avg_err=True, drop=0.0, probs=True)
     # T = 45000
     # ts = []
@@ -185,11 +183,11 @@ def main():
         # fn = f'{key}_new_subset_{i}_{iv}'
         # idxs = th.load(os.path.join(loc, f'{key}_idx.p'))
         # ss = i if key == 'yh' else iv
-        fn = f'{key}_more_ckpts_with_ends'
-        idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'bs', 'aug', 'bn']
+        fn = f'{key}_test2_wr_with_ends'
+        idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'bs', 'aug']
         print(d['m'].unique())
         embed(d, extra_pts=extra_pts, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
-              idx=idx, force=True, distf='dbhat', reduction='mean', chunks=200)
+              idx=idx, force=True, distf='dbhat', reduction='mean', chunks=500)
 
 
 if __name__ == '__main__':

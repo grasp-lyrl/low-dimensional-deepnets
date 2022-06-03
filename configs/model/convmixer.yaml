@@ -7,3 +7,4 @@ model_args:
   patch_size: 2
   n_classes: 10
   bn: True
+  dropout_rate: 0.0

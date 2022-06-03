@@ -5,3 +5,4 @@ model_args:
   c1: 96 
   c2: 144
   bn: True
+  dropout_rate: 0.0
