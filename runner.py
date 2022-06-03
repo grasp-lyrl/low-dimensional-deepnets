@@ -8,7 +8,7 @@ import tqdm, time, os, json
 from utils import *
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
-root = os.path.join('results', 'models', 'test2')
+root = os.path.join('results', 'models', 'test')
 
 from fastcore.script import *
 
@@ -75,11 +75,10 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
 
         if 5 <= epoch <= 25:
             ss.append(helper(t))
-        elif 25 < epoch <= 65 and epoch % 5 == 0:
+        elif 25 < epoch <= 65 and epoch % 4 == 0:
             ss.append(helper(t))
-        else:
-            if epoch % 15 == 0 or (epoch == epochs-1):
-                ss.append(helper(t))
+        elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs-1):
+            ss.append(helper(t))
     return ss
 
 
