@@ -13,7 +13,7 @@ def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['
     r = []
     for f in glob.glob(os.path.join(loc, '*}.p')):
         configs = json.loads(f[f.find('{'):f.find('}')+1])
-        if all(configs[k] in v for (k, v) in cond.items()):
+        if all(configs.get(k, "na") in v for (k, v) in cond.items()):
             d = th.load(f)
             if isinstance(d, dict):
                 d = d['data']
@@ -22,9 +22,12 @@ def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['
             for i in range(len(d)):
                 t = {}
                 t.update(configs)
+                t.update({k: configs.get(k, "na") for (k, v) in cond.items()})
                 t.update({'t': i})
                 t.update(d[i])
                 r.append(t)
+        else:
+            print(f)
 
     d = pd.DataFrame(r)
     if avg_err:

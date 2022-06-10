@@ -124,7 +124,7 @@ def proj_(w, n, ne):
 
 def main():
     dev = 'cuda'
-    loc = 'results/models/test2'
+    loc = 'results/plots'
 
     # d = pd.read_pickle(os.path.join(loc, "all_models.pkl"))
     # d['avg'] = False
@@ -136,16 +136,16 @@ def main():
     # import torch.nn.functional as F
     # true = pd.Series(dict(m='true', yh=F.one_hot(data['y']), yvh=F.one_hot(data['yv'])))
     # d = d.append(true, ignore_index=True)
-    models = ["wr-10-4-8"]
+    # models = ["wr-10-4-8"]
     # opts = ["Adam", "SGD"]
-    # opts = ["adam", "sgd", "sgdn"]
-    # models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
+    models = ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"]
     opts = ["adam", "sgd", "sgdn"]
     # d = th.load(os.path.join(loc, 'new_avg.p'))
     # d['yh'] = d.apply(lambda r: r.yh.squeeze(), axis=1)
     # d = avg_model(d, groupby=['m', 'opt', 't'], probs=True, get_err=True,
     #                 update_d=True, compute_distance=False, dev='cuda', keys=['yh'])['d']
-    d = load_d(loc, cond={'aug': ["simple"], 'm': models, 'opt':opts},
+    d = load_d(loc, cond={'aug': ["na", True], 'm': models, 'opt':opts, 
+                'corner':["na", "uniform", "subsample-200", "subsample-2000"]},
             avg_err=True, drop=0.0, probs=True)
     # T = 45000
     # ts = []
@@ -183,11 +183,11 @@ def main():
         # fn = f'{key}_new_subset_{i}_{iv}'
         # idxs = th.load(os.path.join(loc, f'{key}_idx.p'))
         # ss = i if key == 'yh' else iv
-        fn = f'{key}_test2_wr_with_ends'
-        idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'bs', 'aug']
-        print(d['m'].unique())
+        fn = f'{key}_plot_all'
+        idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'bs', 'aug', 'bn', 'corner']
+        print(d['seed'].unique())
         embed(d, extra_pts=extra_pts, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
-              idx=idx, force=True, distf='dbhat', reduction='mean', chunks=500)
+              idx=idx, force=True, distf='dbhat', reduction='mean', chunks=800)
 
 
 if __name__ == '__main__':
