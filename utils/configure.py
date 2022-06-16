@@ -107,7 +107,10 @@ def get_data(data_args={'data':'CIFAR10', 'aug':'none', 'sub_sample':0}, resize=
                 transforms.RandomErasing(p=aug_args['reprob'])
             ])
         elif aug == 'none':
-            transform_train = transforms.ToTensor()
+            transform_train = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(cifar10_mean, cifar10_std)
+            ])
         transform_test = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(cifar10_mean, cifar10_std)

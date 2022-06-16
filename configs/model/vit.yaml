@@ -8,6 +8,6 @@ model_args:
   depth: 6
   heads: 8
   mlp_dim: 512
-  dropout_rate: 0.1
-  emb_dropout: 0.1
+  dropout_rate: 0.0
+  emb_dropout: 0.0
   bn: True

@@ -5,6 +5,8 @@ epochs: 200
 opt: SGD
 opt_args:
   lr: 0.1
-  weight_decay: 0.0
+  momentum: 0.9
+  nesterov: true
+  weight_decay: 1.0e-05
 sched_args: null
 scheduler: cosine

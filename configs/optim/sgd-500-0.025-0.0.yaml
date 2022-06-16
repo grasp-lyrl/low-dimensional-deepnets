@@ -1,10 +1,10 @@
 autocast: false
 batch_seed: -1
-bs: 200
+bs: 500
 epochs: 200
-opt: Adam 
+opt: SGD
 opt_args:
-  lr: 0.001
+  lr: 0.025
   weight_decay: 0.0
 sched_args: null
 scheduler: cosine

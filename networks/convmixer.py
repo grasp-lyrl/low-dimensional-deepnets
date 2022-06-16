@@ -10,7 +10,7 @@ class Residual(nn.Module):
         return self.fn(x) + x
 
 class convmixer(nn.Module):
-    def __init__(self, dim, depth, kernel_size=9, patch_size=7, n_classes=10, bn=False):
+    def __init__(self, dim, depth, kernel_size=9, patch_size=7, n_classes=10, bn=False, dropout_rate=0.0):
         super().__init__()
         self.m = [
             nn.Conv2d(3, dim, kernel_size=patch_size, stride=patch_size),

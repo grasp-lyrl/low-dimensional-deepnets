@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import torch as th
 import torch.nn.functional as F
 import numpy as np
-import tqdm, time, os, json
+import time, os, json
 
 from utils import *
 
@@ -55,7 +55,7 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
     ss = []
     t = 0
     ss.append(helper(t))
-    for epoch in tqdm.tqdm(range(epochs)):
+    for epoch in range(epochs):
         for i, (x, y) in enumerate(trainloader):
             x, y = x.to(dev), y.to(dev)
 

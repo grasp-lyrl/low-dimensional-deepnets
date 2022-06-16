@@ -10,9 +10,6 @@ bs:
   - 200
   - 500
   - 1000
-# bn:
-#   - False
-#   - True
 aug:
   - none
   - simple

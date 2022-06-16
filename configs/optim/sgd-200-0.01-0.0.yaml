@@ -6,8 +6,5 @@ opt: SGD
 opt_args:
   lr: 0.01
   weight_decay: 0.0
-sched_args:
-  cycle_mult: 1
-  gamma: 0.1
-  warmup_steps: 10
+sched_args: null
 scheduler: cosine

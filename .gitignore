@@ -8,3 +8,6 @@ create_torun.py
 *.pdf
 logits.ipynb
 data/*
+load_log.py
+big_run.ipynb
+log*
