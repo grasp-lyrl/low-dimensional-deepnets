@@ -11,3 +11,4 @@ data/*
 load_log.py
 big_run.ipynb
 log*
+runs/*

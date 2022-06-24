@@ -1,0 +1,10 @@
+autocast: true
+batch_seed: -1
+bs: 500
+epochs: 300
+opt: Adam
+opt_args:
+  lr: 0.0025
+  weight_decay: 0.001
+sched_args: null
+scheduler: cosine
