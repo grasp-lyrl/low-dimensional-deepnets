@@ -13,10 +13,11 @@ def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0):
     # x1, x2 shape (num_points, num_samples, num_classes)
     np1, ns, _ = x1.size()
     np2, ns, _ = x2.size()
-    x1, x2 = x1.transpose(0, 1).to(dev), x2.transpose(0, 1).to(dev)
+    print(np1, np2, ns)
+    x1, x2 = x1.transpose(0, 1), x2.transpose(0, 1)
     w = np.zeros([np1, np2])
     if debug:
-        assert th.allclose(x1.sum(-1), th.ones(ns, np1).to(dev)) and th.allclose(x2.sum(-1), th.ones(ns, np2).to(dev))
+        assert th.allclose(x1.sum(-1), th.ones(ns, np1)) and th.allclose(x2.sum(-1), th.ones(ns, np2))
     chunks = chunks or 1
     for aa in tqdm.tqdm(th.chunk(th.arange(ns), chunks)):
         xx1 = x1[aa, :].to(dev)
@@ -25,6 +26,8 @@ def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0):
         w_ = -th.log(th.bmm(th.sqrt(xx1), th.sqrt(xx2).transpose(1, 2)))
         w_[w_ == th.inf] = 100
         w_[w_ < 0] = 0
+        if th.isnan(w_).sum()>0:
+            import ipdb; ipdb.set_trace()
         w += w_.sum(0).cpu().numpy()
     if reduction == 'mean':
         return w / ns
