@@ -1,6 +1,5 @@
 import os
 import json
-import glob
 import pandas as pd
 import torch as th
 import numpy as np
@@ -33,35 +32,34 @@ def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
 
 
-def load_d(loc, cond={}, avg_err=False, numpy=True, probs=False, drop=0, keys=['yh', 'yvh'], verbose=False, nmodels=-1, return_nan=False):
+def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, keys=['yh', 'yvh'], verbose=False, nmodels=-1, return_nan=False):
     r = []
     nan_models = []
     count = 0
     nmodels = math.inf if nmodels < 0 else nmodels
-    for f in glob.glob(os.path.join(loc, '*}.p')):
+    for f in file_list:
         configs = json.loads(f[f.find('{'):f.find('}')+1])
-        if all(configs.get(k, "na") in v for (k, v) in cond.items()):
-            d_ = th.load(f)
-            d = d_['data']
-            if any(np.isnan(d[-1]['f'])):
-                nan_models.append(configs)
-                continue
-            if verbose:
-                print(f, len(d))
-            for i in range(len(d)):
-                t = {}
-                t.update(configs)
-                t.update({'epochs': getattr(d_['configs'], 'epochs')})
-                if ts is not None:
-                    t_ = ts[(t['bs'], t['epochs'])]
-                else:
-                    t_ = i
-                t.update({'t': t_})
-                t.update(d[i])
-                r.append(t)
-            count += 1
-            if count > nmodels:
-                break
+        d_ = th.load(f)
+        d = d_['data']
+        if any(np.isnan(d[-1]['f'])):
+            nan_models.append(configs)
+            continue
+        if verbose:
+            print(f, len(d))
+        for i in range(len(d)):
+            t = {}
+            t.update(configs)
+            t.update({'epochs': getattr(d_['configs'], 'epochs')})
+            if ts is not None:
+                t_ = ts[(t['bs'], t['epochs'])]
+            else:
+                t_ = i
+            t.update({'t': t_})
+            t.update(d[i])
+            r.append(t)
+        count += 1
+        if count > nmodels:
+            break
     print(len(r))
 
     d = pd.DataFrame(r)

@@ -2,6 +2,7 @@ results/*
 inpca_results/*
 *.pyc
 torun.txt
+*.txt
 .ipynb_checkpoints/*
 run.sh
 create_torun.py
@@ -12,3 +13,4 @@ load_log.py
 big_run.ipynb
 log*
 runs/*
+inpca_results_all/*

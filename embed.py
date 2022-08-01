@@ -13,25 +13,29 @@ import pandas as pd
 from utils import *
 import distance
 
-def embed(dd, extra_pts=None, fn='', ss=slice(0,None,1), probs=False, ne=3, key='yh', force=False, idx=None, dev='cuda', distf='dbhat', 
+
+def embed(dd, extra_pts=None, fn='', ss=slice(0, None, 1), probs=False, ne=3, key='yh', force=False, idx=None, dev='cuda', distf='dbhat',
           reduction='sum', loc='inpca_results', chunks=1):
     idx = idx or ['seed', 'widen', 'numc', 't', 'err', 'verr', 'favg', 'vfavg']
     dc = dd[idx]
     if extra_pts is not None:
-        qc = extra_pts.loc[:, extra_pts.columns.isin(idx)] 
+        qc = extra_pts.loc[:, extra_pts.columns.isin(idx)]
         dc = pd.concat([dc, qc])
-        q = th.Tensor(np.stack([extra_pts.iloc[i][key][ss] for i in range(len(extra_pts))])).cpu()
+        q = th.Tensor(np.stack([extra_pts.iloc[i][key][ss]
+                      for i in range(len(extra_pts))])).cpu()
     th.save(dc, os.path.join(loc, 'didx_%s.p' % fn))
-    n = len(dd) # number of models
+    n = len(dd)  # number of models
 
     x = th.Tensor(np.stack([dd.iloc[i][key][ss] for i in range(n)])).cpu()
 
     if (not os.path.isfile(os.path.join(loc, 'w_%s.p' % fn))) or force:
         if 'kl' in distf:
-            w = getattr(distance, distf)(x, x, reduction=reduction, dev=dev, chunks=chunks, probs=probs)
+            w = getattr(distance, distf)(x, x, reduction=reduction,
+                                         dev=dev, chunks=chunks, probs=probs)
         else:
             x = th.exp(x) if not probs else x
-            w = getattr(distance, distf)(x, x, reduction=reduction, dev=dev, chunks=chunks)
+            w = getattr(distance, distf)(
+                x, x, reduction=reduction, dev=dev, chunks=chunks)
         # w = dist_(x, probs=probs, dev=dev, distf=distf, reduction=reduction)
         print('Saving w')
         th.save(w, os.path.join(loc, 'w_%s.p' % fn))
@@ -41,37 +45,41 @@ def embed(dd, extra_pts=None, fn='', ss=slice(0,None,1), probs=False, ne=3, key=
 
     d_mean = w.mean(0)
     l = np.eye(w.shape[0]) - 1.0/w.shape[0]
-    w = -l @ w @ l / 2 
+    w = -l @ w @ l / 2
     r = proj_(w, n, ne)
     if extra_pts is not None:
-        q = lazy_embed(q, x, w, d_mean, evals=r['e'], evecs=r['v'], distf=distf, ne=ne, chunks=chunks)
-        r['xp'] = np.vstack([r['xp'], q]) 
+        q = lazy_embed(
+            q, x, w, d_mean, evals=r['e'], evecs=r['v'], distf=distf, ne=ne, chunks=chunks)
+        r['xp'] = np.vstack([r['xp'], q])
     th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return
 
 
-def xembed(d1, d2, extra_pts=None, fn='', ss=slice(0,None,1), probs=False, ne=3, key='yh', force=False, idx=None, dev='cuda', distf='dbhat', 
-          reduction='sum', loc='inpca_results', chunks=1, proj=False):
+def xembed(d1, d2, extra_pts=None, fn='', ss=slice(0, None, 1), probs=False, ne=3, key='yh', force=False, idx=None, dev='cuda', distf='dbhat',
+           reduction='sum', loc='inpca_results', chunks=1, proj=False):
     idx = idx or ['seed', 'widen', 'numc', 't', 'err', 'verr', 'favg', 'vfavg']
     dr = d1[idx]
     dc = d2[idx]
     if extra_pts is not None:
-        qc = extra_pts.loc[:, extra_pts.columns.isin(idx)] 
+        qc = extra_pts.loc[:, extra_pts.columns.isin(idx)]
         dc = pd.concat([dc, qc])
-        q = th.Tensor(np.stack([extra_pts.iloc[i][key][ss] for i in range(len(extra_pts))])).cpu()
+        q = th.Tensor(np.stack([extra_pts.iloc[i][key][ss]
+                      for i in range(len(extra_pts))])).cpu()
     th.save({'dr': dr, 'dc': dc}, os.path.join(loc, 'didx_%s.p' % fn))
-    n, m = len(d1), len(d2) # number of models
+    n, m = len(d1), len(d2)  # number of models
 
     x = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(n)])).cpu()
     y = th.Tensor(np.stack([d2.iloc[i][key][ss] for i in range(m)])).cpu()
 
     if (not os.path.isfile(os.path.join(loc, 'w_%s.p' % fn))) or force:
         if 'kl' in distf:
-            w = getattr(distance, distf)(x, y, reduction=reduction, dev=dev, chunks=chunks, probs=probs)
+            w = getattr(distance, distf)(x, y, reduction=reduction,
+                                         dev=dev, chunks=chunks, probs=probs)
         else:
             x = th.exp(x) if not probs else x
             y = th.exp(y) if not probs else y
-            w = getattr(distance, distf)(x, y, reduction=reduction, dev=dev, chunks=chunks)
+            w = getattr(distance, distf)(
+                x, y, reduction=reduction, dev=dev, chunks=chunks)
         # w = dist_(x, probs=probs, dev=dev, distf=distf, reduction=reduction)
         print('Saving w')
         th.save(w, os.path.join(loc, 'w_%s.p' % fn))
@@ -82,14 +90,14 @@ def xembed(d1, d2, extra_pts=None, fn='', ss=slice(0,None,1), probs=False, ne=3,
     if proj:
         d_mean = w.mean(0)
         l = np.eye(w.shape[0]) - 1.0/w.shape[0]
-        w = -l @ w @ l / 2 
+        w = -l @ w @ l / 2
         r = proj_(w, n, ne)
         if extra_pts is not None:
-            q = lazy_embed(q, x, w, d_mean, evals=r['e'], evecs=r['v'], distf=distf, ne=ne, chunks=chunks)
-            r['xp'] = np.vstack([r['xp'], q]) 
+            q = lazy_embed(
+                q, x, w, d_mean, evals=r['e'], evecs=r['v'], distf=distf, ne=ne, chunks=chunks)
+            r['xp'] = np.vstack([r['xp'], q])
         th.save(r, os.path.join(loc, 'r_%s.p' % fn))
     return
-
 
 
 # Calculate the embedding of a distibution q in the intensive embedding of models p_list with divergence=distance, supply d_list the precalculated matrix of distances pf p_list.
@@ -99,9 +107,9 @@ def lazy_embed(q, ps, w, d_mean, evals=None, evecs=None, distf='dbhat', ne=3, ch
     dp = getattr(distance, distf)(q, ps, chunks=chunks)
     d_mean_mean = np.mean(d_mean)
     if (evals is not None) or (evecs is not None):
-        _, _, evals, evecs = proj_(w, N, ne).values() 
+        _, _, evals, evecs = proj_(w, N, ne).values()
     dp_mean = dp-np.mean(dp)-d_mean+d_mean_mean
-    dp_mean = -.5*dp_mean  
+    dp_mean = -.5*dp_mean
     sqrtsigma = np.sqrt(np.abs(evals))
     return ((1/sqrtsigma)*np.matmul(dp_mean, evecs))
 
@@ -129,25 +137,32 @@ def dist_(xs, probs=True, dev='cuda', distf='bhat', reduction='sum', chunks=200)
         elif distf == 'kl':
             if probs:
                 logaa = th.log(aa)
-                logaa[logaa==-th.inf] = 100
-                w_ = (aa * logaa).sum(-1, keepdim=True) - th.bmm(aa, logaa.transpose(1, 2))
+                logaa[logaa == -th.inf] = 100
+                w_ = (aa * logaa).sum(-1, keepdim=True) - \
+                    th.bmm(aa, logaa.transpose(1, 2))
             else:
-                w_ = (th.exp(aa) * aa).sum(-1, keepdim=True) - th.bmm(th.exp(aa), (aa).transpose(1, 2))
+                w_ = (th.exp(aa) * aa).sum(-1, keepdim=True) - \
+                    th.bmm(th.exp(aa), (aa).transpose(1, 2))
             w += getattr(w_, reduction)(0).cpu().numpy()
         elif distf == 'skl':
             if probs:
                 logaa = th.log(aa)
-                logaa[logaa==-th.inf] = 100
-                w1 = (aa * logaa).sum(-1, keepdim=True) - th.bmm(aa, logaa.transpose(1, 2))
-                w2 = (aa * logaa).sum(-1, keepdim=True) - th.bmm(logaa, aa.transpose(1, 2))
+                logaa[logaa == -th.inf] = 100
+                w1 = (aa * logaa).sum(-1, keepdim=True) - \
+                    th.bmm(aa, logaa.transpose(1, 2))
+                w2 = (aa * logaa).sum(-1, keepdim=True) - \
+                    th.bmm(logaa, aa.transpose(1, 2))
                 w_ = 0.5*(w1+w2)
             else:
-                w1 = (th.exp(aa) * aa).sum(-1, keepdim=True) - th.bmm(th.exp(aa), (aa).transpose(1, 2))
-                w2 = (th.exp(aa) * aa).sum(-1, keepdim=True) - th.bmm(aa, th.exp(aa).transpose(1, 2))
+                w1 = (th.exp(aa) * aa).sum(-1, keepdim=True) - \
+                    th.bmm(th.exp(aa), (aa).transpose(1, 2))
+                w2 = (th.exp(aa) * aa).sum(-1, keepdim=True) - \
+                    th.bmm(aa, th.exp(aa).transpose(1, 2))
                 w_ = 0.5*(w1+w2)
     if reduction == 'mean':
         w = w/xs.size(0)
     return w
+
 
 def proj_(w, n, ne):
     print('Projecting')
@@ -163,37 +178,44 @@ def proj_(w, n, ne):
     xp = v*np.sqrt(np.abs(e))
     return dict(xp=xp, w=w, e=e, v=v)
 
+def process_pair(pair, file_list):
+    print(pair)
+    s1, s2 = pair
+    d1, nan_models = load_d(
+        file_list=file_list[s1], avg_err=True, probs=True, return_nan=True)
+    th.save(nan_models, f'inpca_results_all/nan_models_{s1}.p')
+    if s1 == s2:
+        d2 = d1
+    else:
+        d2, nan_models = load_d(
+            file_list=file_list[s2], avg_err=True, probs=True, return_nan=True)
+        th.save(nan_models, f'inpca_results_all/nan_models_{s2}.p')
+
+    for key in ['yh', 'yvh']:
+        fn = f'{key}_{s1}_{s2}'
+        idx = ['seed', 'm', 'opt', 't', 'err', 'favg',
+                'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd']
+        xembed(d1, d2, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
+                idx=idx, force=False, distf='dbhat', reduction='mean', chunks=3600, proj=False)
+
 
 def main():
     from itertools import product
-    loc = 'results/models/all'
-    for s1, s2 in product(range(42, 52), range(42, 52)):
-        d1, nan_models = load_d(loc, cond={"seed": [s1]}, avg_err=True, drop=0.1, probs=True, verbose=True, return_nan=True)
-        d2, nan_models = load_d(loc, cond={"seed": [s2]}, avg_err=True, drop=0.1, probs=True, verbose=True, return_nan=True)
+    import torch.multiprocessing as mp
+    from functools import partial
 
-        th.save(nan_models, 'inpca_results_all/nan_models.p')
-        # print("data loaded")
-    
-        # data = get_data()
-        # y, yv = th.tensor(data['train'].targets).long(), th.tensor(data['val'].targets).long()
-        # y_ = np.zeros((len(y), y.max()+1))
-        # y_[np.arange(len(y)), y] = 1
-        # yv_ = np.zeros((len(yv), yv.max()+1))
-        # yv_[np.arange(len(yv)), yv] = 1
-        # extra_pts = [dict(seed=0, m='true', t=th.inf, err=0., verr=0., yh=y_, yvh=yv_), 
-        #             dict(seed=0, m='random', t=0, err=0.9, verr=0.9, 
-        #             yh=np.ones([len(y), y.max()+1])/(y.max()+1), 
-        #             yvh=np.ones([len(yv), yv.max()+1])/(yv.max()+1))
-        #             ]
-        # extra_pts = pd.DataFrame(extra_pts)
-        for key in ['yh', 'yvh']:
-            # fn = f'{key}_new_subset_{i}_{iv}'
-            # idxs = th.load(os.path.join(loc, f'{key}_idx.p'))
-            # ss = i if key == 'yh' else iv
-            fn = f'{key}_{s1}_{s2}'
-            idx = ['seed', 'm', 'opt', 't', 'err', 'favg', 'verr', 'fvavg', 'bs', 'aug', 'bn', 'lr', 'wd']
-            xembed(d1, d2, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
-                idx=idx, force=False, distf='dbhat', reduction='mean', chunks=3600, proj=False)
+    loc = 'results/models/all'
+    all_files = glob.glob(os.path.join(loc, '*}.p'))
+    file_list = defaultdict(list)
+    for f in all_files:
+        configs = json.loads(f[f.find('{'):f.find('}')+1])
+        file_list[(configs["seed"], configs["m"])].append(f)
+
+    load_list = list(file_list.keys())
+    load_list = product(load_list, load_list)
+
+    with mp.Pool() as pool:
+        results = pool.map(partial(process_pair, file_list=file_list), load_list, chunksize=1)
 
 
 if __name__ == '__main__':
