@@ -178,6 +178,7 @@ def proj_(w, n, ne):
     xp = v*np.sqrt(np.abs(e))
     return dict(xp=xp, w=w, e=e, v=v)
 
+
 def process_pair(pair, file_list):
     print(pair)
     s1, s2 = pair
@@ -194,13 +195,13 @@ def process_pair(pair, file_list):
     for key in ['yh', 'yvh']:
         fn = f'{key}_{s1}_{s2}'
         idx = ['seed', 'm', 'opt', 't', 'err', 'favg',
-                'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd']
+               'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd']
         xembed(d1, d2, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
-                idx=idx, force=False, distf='dbhat', reduction='mean', chunks=3600, proj=False)
+               idx=idx, force=False, distf='dbhat', reduction='mean', chunks=3600, proj=False)
 
 
 def main():
-    from itertools import product
+    from itertools import combinations
     import torch.multiprocessing as mp
     from functools import partial
 
@@ -211,12 +212,49 @@ def main():
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         file_list[(configs["seed"], configs["m"])].append(f)
 
-    load_list = list(file_list.keys())
-    load_list = product(load_list, load_list)
+    load_list_ = list(file_list.keys())
+    load_list = list(combinations(load_list_, 2)) + \
+        [(load_list_[i], load_list_[i]) for i in range(len(load_list_))]
 
     mp.set_start_method('spawn')
     with mp.Pool(processes=8) as pool:
-        results = pool.map(partial(process_pair, file_list=file_list), load_list, chunksize=1)
+        results = pool.map(
+            partial(process_pair, file_list=file_list), load_list, chunksize=1)
+
+
+def join():
+    loc = 'inpca_results'
+    key = "yh"
+    all_files = glob.glob(os.path.join(loc, '*}.p'))
+    file_list = defaultdict(list)
+    for f in all_files:
+        configs = json.loads(f[f.find('{'):f.find('}')+1])
+        file_list[(configs["seed"], configs["m"])].append(f)
+
+    didxs = None
+    load_list = list(file_list.keys())
+    for i in range(len(load_list)):
+        s1 = load_list[i]
+        didxs = pd.concat([didxs, th.load(os.path.join(loc, f"didxs_{key}_{s1}_{s1}.p"))["dc"]])
+        w_ = th.load(os.path.join(loc, f"w_{key}_{s1}_{s1}.p"))
+        if i == 0:
+            w = w_
+        else: 
+            nmodels = w_.shape[0]
+            w[-nmodels:, -nmodels:] = w_
+        for j in range(i+1, len(load_list)):
+            s2 = load_list[j]
+            w_ = th.load(os.path.join(loc, f"w_{key}_{s1}_{s2}.p"))
+            l1, l2 = w_.shape
+            if len(w) == 0:
+                w = w_
+            else:
+                w = np.pad(w, ((0, l2), (0, l1)), mode='constant', constant_values=0)
+                w[:l1:, -l2:] = w_
+                w[-l2:, :l1] = w_.T
+    th.save(didxs, os.path.join(loc, f"didxs_{key}_all.p"))
+    th.save(w, os.path.join(loc, f"w_{key}_all.p"))
+    
 
 
 if __name__ == '__main__':
