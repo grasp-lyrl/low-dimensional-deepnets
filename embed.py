@@ -214,7 +214,8 @@ def main():
     load_list = list(file_list.keys())
     load_list = product(load_list, load_list)
 
-    with mp.Pool() as pool:
+    mp.set_start_method('spawn')
+    with mp.Pool(processes=8) as pool:
         results = pool.map(partial(process_pair, file_list=file_list), load_list, chunksize=1)
 
 
