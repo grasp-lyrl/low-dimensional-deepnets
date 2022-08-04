@@ -218,11 +218,12 @@ def main():
 
     load_list = []
     for (s1, s2) in load_list_:
-        if not os.path.exists(os.path.join('inpca_results',f"w_yh_{s1}_{s2}.p")):
+        if not os.path.exists(os.path.join('inpca_results', f"w_yh_{s1}_{s2}.p")) or not os.path.exists(os.path.join('inpca_results', f'didx_yh_{s1}_{s2}.p')):
             load_list.append((s1, s2))
+    print(load_list)
 
     mp.set_start_method('spawn')
-    with mp.Pool(processes=16) as pool:
+    with mp.Pool(processes=2) as pool:
         results = pool.map(
             partial(process_pair, file_list=file_list), load_list, chunksize=1)
 
@@ -238,44 +239,37 @@ def join():
 
     didxs = None
     load_list = list(file_list.keys())
+    for i in range(len(load_list)):
+        s1 = load_list[i]
+        didxs_fname = os.path.join(loc, f"didx_{key}_{s1}_{s1}.p")
+        didxs = pd.concat([didxs, th.load(didxs_fname)["dc"]])
+        print(len(didxs))
+    th.save(didxs, f"didxs_{key}_all.p")
 
-    import h5py 
-    f = h5py.File(f'w_{key}_all.h5', 'w') 
-    dset = f.create_dataset("w", data=np.zeros([151407, 151407]), maxshape=(None, None))
+    import h5py
+    f = h5py.File(f'w_{key}_all.h5', 'w')
+    dset = f.create_dataset("w", shape=(len(didxs), len(didxs)), maxshape=(None, None), chunks=True)
     start_idx = 0
     for i in range(len(load_list)):
         s1 = load_list[i]
         w_fname = os.path.join(loc, f"w_{key}_{s1}_{s1}.p")
-        didxs_fname = os.path.join(loc, f"didx_{key}_{s1}_{s1}.p")
-        try:
-            w_ = th.load(w_fname)
-            didxs = pd.concat([didxs, th.load(didxs_fname)["dc"]])
-            bsize = len(w_)
-            dset[start_idx:start_idx+bsize, start_idx:start_idx+bsize] = w_
-        except FileNotFoundError:
-            with open('missed.txt', 'a') as f:
-                f.write(f"{w_fname}\n")
-        cidx = start_idx
+        w_ = th.load(w_fname)
+        bsize = len(w_)
+        dset[start_idx:start_idx+bsize, start_idx:start_idx+bsize] = w_
+
+        cidx = start_idx+bsize
         for j in range(i+1, len(load_list)):
             s2 = load_list[j]
             print(s1, s2)
             fname = os.path.join(loc, f"w_{key}_{s1}_{s2}.p")
-            try:
-                w_ = th.load(fname)
-                l1, l2 = w_.shape
-                assert l1 == bsize # debug
-                dset[start_idx:start_idx+bsize, cidx:cidx+l2] = w_
-                dset[start_idx:start_idx+l2, cidx:cidx+bsize] = w_.T
-                cidx += l2
-            except FileNotFoundError:
-                with open('missed.txt', 'a') as f:
-                    f.write(f"{fname}\n")
+            w_ = th.load(fname)
+            l1, l2 = w_.shape
+            assert l1 == bsize  # debug
+            dset[start_idx:start_idx+bsize, cidx:cidx+l2] = w_
+            dset[cidx:cidx+l2, start_idx:start_idx+bsize] = w_.T
+            cidx += l2
 
-        start_idx += bsize 
-        # print(f"saving iter {i}")
-        th.save(didxs, os.path.join(loc, f"didxs_{key}_all.p"))
-        # th.save(w, os.path.join(loc, f"w_{key}_all.p"))
-    
+        start_idx += bsize
 
 
 if __name__ == '__main__':
