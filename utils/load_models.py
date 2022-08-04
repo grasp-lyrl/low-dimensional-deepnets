@@ -18,14 +18,14 @@ for bs in [200, 500, 1000]:
             for i in range(n_batches):
                 t += 1
                 if epoch < 5 and i % (n_batches // 4) == 0:
-                    ts[(bs, epochs)].append(t)
+                    ts[key].append(t)
 
-        if 5 <= epoch <= 25:
-            ts[key].append(t)
-        elif 25 < epoch <= 65 and epoch % 4 == 0:
-            ts[key].append(t)
-        elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs-1):
-            ts[key].append(t)
+            if 5 <= epoch <= 25:
+                ts[key].append(t)
+            elif 25 < epoch <= 65 and epoch % 4 == 0:
+                ts[key].append(t)
+            elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs-1):
+                ts[key].append(t)
 
 
 def get_idx(dd, cond):
@@ -51,7 +51,7 @@ def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, keys=['yh'
             t.update(configs)
             t.update({'epochs': getattr(d_['configs'], 'epochs')})
             if ts is not None:
-                t_ = ts[(t['bs'], t['epochs'])]
+                t_ = ts[(t['bs'], t['epochs'])][i]
             else:
                 t_ = i
             t.update({'t': t_})

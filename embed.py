@@ -2,9 +2,11 @@ import numpy as np
 import scipy.linalg as sp
 import torch as th
 
+from itertools import combinations
+import torch.multiprocessing as mp
+from functools import partial
 import os
-import pdb
-import sys
+import h5py
 import json
 import glob
 import tqdm
@@ -85,7 +87,7 @@ def xembed(d1, d2, extra_pts=None, fn='', ss=slice(0, None, 1), probs=False, ne=
         th.save(w, os.path.join(loc, 'w_%s.p' % fn))
     else:
         print('Found: ', os.path.join(loc, 'w_%s.p' % fn))
-        w = th.load(os.path.join(loc, 'w_%s.p' % fn))
+        # w = th.load(os.path.join(loc, 'w_%s.p' % fn))
 
     if proj:
         d_mean = w.mean(0)
@@ -179,6 +181,15 @@ def proj_(w, n, ne):
     return dict(xp=xp, w=w, e=e, v=v)
 
 
+def get_idxs(s, file_list, idx=None):
+    print(s)
+    idx = idx or  ['seed', 'm', 'opt', 't', 'err', 'favg',
+               'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd']
+    d = load_d(file_list=file_list[s], avg_err=True,probs=False, return_nan=False)
+    didx = d[idx]
+    th.save(didx, os.path.join('inpca_results', f'didx_{s}.p'))
+    print(f'saved {s}')
+
 def process_pair(pair, file_list):
     print(pair)
     s1, s2 = pair
@@ -201,9 +212,6 @@ def process_pair(pair, file_list):
 
 
 def main():
-    from itertools import combinations
-    import torch.multiprocessing as mp
-    from functools import partial
 
     loc = 'results/models/all'
     all_files = glob.glob(os.path.join(loc, '*}.p'))
@@ -213,19 +221,19 @@ def main():
         file_list[(configs["seed"], configs["m"])].append(f)
 
     load_list_ = list(file_list.keys())
-    load_list_ = list(combinations(load_list_, 2)) + \
+    load_list = list(combinations(load_list_, 2)) + \
         [(load_list_[i], load_list_[i]) for i in range(len(load_list_))]
 
-    load_list = []
-    for (s1, s2) in load_list_:
-        if not os.path.exists(os.path.join('inpca_results', f"w_yh_{s1}_{s2}.p")) or not os.path.exists(os.path.join('inpca_results', f'didx_yh_{s1}_{s2}.p')):
-            load_list.append((s1, s2))
-    print(load_list)
+    # load_list = []
+    # for (s1, s2) in load_list_:
+    #     if not os.path.exists(os.path.join('inpca_results', f"w_yh_{s1}_{s2}.p")) or not os.path.exists(os.path.join('inpca_results', f'didx_yh_{s1}_{s2}.p')):
+    #         load_list.append((s1, s2))
+    # print(load_list)
 
     mp.set_start_method('spawn')
-    with mp.Pool(processes=2) as pool:
+    with mp.Pool(processes=8) as pool:
         results = pool.map(
-            partial(process_pair, file_list=file_list), load_list, chunksize=1)
+            partial(get_idxs, file_list=file_list), load_list_, chunksize=1)
 
 
 def join():
@@ -241,14 +249,14 @@ def join():
     load_list = list(file_list.keys())
     for i in range(len(load_list)):
         s1 = load_list[i]
-        didxs_fname = os.path.join(loc, f"didx_{key}_{s1}_{s1}.p")
-        didxs = pd.concat([didxs, th.load(didxs_fname)["dc"]])
+        didxs_fname = os.path.join(loc, f"didx_{s1}.p")
+        didxs = pd.concat([didxs, th.load(didxs_fname)])
         print(len(didxs))
     th.save(didxs, f"didxs_{key}_all.p")
 
-    import h5py
     f = h5py.File(f'w_{key}_all.h5', 'w')
-    dset = f.create_dataset("w", shape=(len(didxs), len(didxs)), maxshape=(None, None), chunks=True)
+    dset = f.create_dataset("w", shape=(len(didxs), len(
+        didxs)), maxshape=(None, None), chunks=True)
     start_idx = 0
     for i in range(len(load_list)):
         s1 = load_list[i]
@@ -271,7 +279,36 @@ def join():
 
         start_idx += bsize
 
+def project():
+    loc = "inpca_results_all"
+    fn = "yh_all"
+    ne = 3
+    seed = 42
+
+    didx = th.load(os.path.join(loc, f"didxs_{fn}.p"))
+    np.random.seed(seed)
+    # idx = np.sort(np.random.choice(len(didx), 10000))
+    idx = range(0, len(didx), 100)
+    folder = os.path.join(loc, str(seed))
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    print(idx)
+
+    didx = didx.iloc[idx]
+    th.save(didx, os.path.join(folder, f'didx_{fn}.p'))
+
+    f = h5py.File(os.path.join(loc, f'w_{fn}.h5'), 'r')
+    w = f['w'][::100, ::100]
+    # w = w[:, idx][idx, :]
+    n = w.shape[0]
+
+    l = np.eye(w.shape[0]) - 1.0/w.shape[0]
+    w = -l @ w @ l / 2
+    r = proj_(w, n, ne)
+    th.save(r, os.path.join(folder, f'r_{fn}.p'))
 
 if __name__ == '__main__':
     # main()
-    join()
+    # join()
+    project()
