@@ -282,25 +282,23 @@ def join():
 def project():
     loc = "inpca_results_all"
     fn = "yh_all"
-    ne = 3
-    seed = 42
+    ne = 1 
+    seed = 48
 
     didx = th.load(os.path.join(loc, f"didxs_{fn}.p"))
-    np.random.seed(seed)
-    # idx = np.sort(np.random.choice(len(didx), 10000))
-    idx = range(0, len(didx), 100)
+    idx = get_idx(didx, f"seed=={seed}")
+    # idx = range(0, len(didx), 10)
     folder = os.path.join(loc, str(seed))
     if not os.path.exists(folder):
         os.makedirs(folder)
-
-    print(idx)
 
     didx = didx.iloc[idx]
     th.save(didx, os.path.join(folder, f'didx_{fn}.p'))
 
     f = h5py.File(os.path.join(loc, f'w_{fn}.h5'), 'r')
-    w = f['w'][::100, ::100]
-    # w = w[:, idx][idx, :]
+    # w = f['w'][::100, ::100]
+    w = f['w'][:]
+    w = w[:, idx][idx, :]
     n = w.shape[0]
 
     l = np.eye(w.shape[0]) - 1.0/w.shape[0]
