@@ -14,5 +14,6 @@ big_run.ipynb
 log*
 runs/*
 inpca_results_all/*
-w_yh_all.h5
+*.h5
 sgd_models.zip
+didxs_yvh_all.p

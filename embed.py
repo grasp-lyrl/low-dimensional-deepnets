@@ -1,3 +1,4 @@
+from genericpath import isfile
 import numpy as np
 import scipy.linalg as sp
 import torch as th
@@ -102,13 +103,14 @@ def xembed(d1, d2, extra_pts=None, fn='', ss=slice(0, None, 1), probs=False, ne=
     return
 
 
-# Calculate the embedding of a distibution q in the intensive embedding of models p_list with divergence=distance, supply d_list the precalculated matrix of distances pf p_list.
-def lazy_embed(q, ps, w, d_mean, evals=None, evecs=None, distf='dbhat', ne=3, chunks=1):
+# Calculate the embedding of a distibution q in the intensive embedding of models ps with divergence=distf, supply d_list the precalculated matrix of distances pf p_list.
+def lazy_embed(q=None, ps=None, w=None, d_mean=None, dp=None, evals=None, evecs=None, distf='dbhat', ne=3, chunks=1):
     # w: centered pairwise distance, d_mean: mean before centering
-    N, _, _ = ps.shape
-    dp = getattr(distance, distf)(q, ps, chunks=chunks)
+    if dp is None:
+        dp = getattr(distance, distf)(q, ps, chunks=chunks)
     d_mean_mean = np.mean(d_mean)
-    if (evals is not None) or (evecs is not None):
+    if (evals is None) or (evecs is None):
+        N, _, _ = ps.shape
         _, _, evals, evecs = proj_(w, N, ne).values()
     dp_mean = dp-np.mean(dp)-d_mean+d_mean_mean
     dp_mean = -.5*dp_mean
@@ -183,9 +185,10 @@ def proj_(w, n, ne):
 
 def get_idxs(s, file_list, idx=None):
     print(s)
-    idx = idx or  ['seed', 'm', 'opt', 't', 'err', 'favg',
-               'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd']
-    d = load_d(file_list=file_list[s], avg_err=True,probs=False, return_nan=False)
+    idx = idx or ['seed', 'm', 'opt', 't', 'err', 'favg',
+                  'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd']
+    d = load_d(file_list=file_list[s],
+               avg_err=True, probs=False, return_nan=False)
     didx = d[idx]
     th.save(didx, os.path.join('inpca_results', f'didx_{s}.p'))
     print(f'saved {s}')
@@ -238,13 +241,14 @@ def main():
 
 def join():
     loc = 'inpca_results'
-    key = "yh"
+    key = "yvh"
     all_files = glob.glob(os.path.join('results/models/all', '*}.p'))
     file_list = defaultdict(list)
     for f in all_files:
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         file_list[(configs["seed"], configs["m"])].append(f)
 
+    save_loc = 'inpca_results_all'
     didxs = None
     load_list = list(file_list.keys())
     for i in range(len(load_list)):
@@ -252,9 +256,9 @@ def join():
         didxs_fname = os.path.join(loc, f"didx_{s1}.p")
         didxs = pd.concat([didxs, th.load(didxs_fname)])
         print(len(didxs))
-    th.save(didxs, f"didxs_{key}_all.p")
+    th.save(didxs, os.path.join(save_loc, f"didxs_{key}_all.p"))
 
-    f = h5py.File(f'w_{key}_all.h5', 'w')
+    f = h5py.File(os.path.join(save_loc, f'w_{key}_all.h5'), 'w')
     dset = f.create_dataset("w", shape=(len(didxs), len(
         didxs)), maxshape=(None, None), chunks=True)
     start_idx = 0
@@ -279,34 +283,60 @@ def join():
 
         start_idx += bsize
 
-def project():
+
+def project(fn='yh_all'):
     loc = "inpca_results_all"
-    fn = "yh_all"
-    ne = 1 
-    seed = 48
+    ne = 3
+    seed = 47
+    err_threshold = 0.1
 
     didx = th.load(os.path.join(loc, f"didxs_{fn}.p"))
     idx = get_idx(didx, f"seed=={seed}")
-    # idx = range(0, len(didx), 10)
     folder = os.path.join(loc, str(seed))
     if not os.path.exists(folder):
         os.makedirs(folder)
-
-    didx = didx.iloc[idx]
-    th.save(didx, os.path.join(folder, f'didx_{fn}.p'))
+    
+    if os.path.isfile(os.path.join(folder, f'didx_{fn}.p')):
+        didx_ = th.load(os.path.join(folder, f'didx_{fn}.p'))
+    else:
+        didx_ = didx.iloc[idx]
+        # filter out un-trained model
+        idx = []
+        for (_, indices) in didx_.groupby(['m', 'opt', 'bs', 'aug', 'lr', 'wd']).indices.items():
+            if didx_.iloc[indices[-1]]['err'] < err_threshold:
+                idx.extend(indices)
+        idx = sorted(idx)
+        didx_ = didx.iloc[idx]
+        th.save(didx_, os.path.join(folder, f'didx_{fn}.p'))
 
     f = h5py.File(os.path.join(loc, f'w_{fn}.h5'), 'r')
-    # w = f['w'][::100, ::100]
-    w = f['w'][:]
-    w = w[:, idx][idx, :]
+    w = f['w'][:, idx][idx, :]
     n = w.shape[0]
+    d_mean = w.mean(0)
 
-    l = np.eye(w.shape[0]) - 1.0/w.shape[0]
-    w = -l @ w @ l / 2
-    r = proj_(w, n, ne)
-    th.save(r, os.path.join(folder, f'r_{fn}.p'))
+    if os.path.isfile(os.path.join(folder, f'r_{fn}.p')):
+        r = th.load(os.path.join(folder, f'r_{fn}.p'))
+    else:
+        l = np.eye(w.shape[0]) - 1.0/w.shape[0]
+        w = -l @ w @ l / 2
+        r = proj_(w, n, ne)
+        th.save(r, os.path.join(folder, f'r_{fn}.p'))
+
+    # project other random seeds
+    for s in range(42, 52):
+        ridx = get_idx(didx, f"seed=={s}")
+        cidx = get_idx(didx, f"seed=={seed}")
+        dp = f['w'][:, cidx][ridx, :]
+        q = lazy_embed(dp=dp, d_mean=d_mean, evals=r['e'], evecs=r['v'], ne=ne)
+        r['xp'] = np.vstack([r['xp'], q])
+        didx_ = pd.concat([didx_, didx.iloc[cidx]])
+
+    th.save(didx_, os.path.join(folder, f'didx_{fn}_all.p'))
+    th.save(r, os.path.join(folder, f'r_{fn}_all.p'))
+
 
 if __name__ == '__main__':
     # main()
     # join()
-    project()
+    project('yh_all')
+    project('yvh_all')
