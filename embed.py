@@ -196,9 +196,12 @@ def get_idxs(s, file_list, idx=None):
 def process_pair(pair, file_list):
     print(pair)
     s1, s2 = pair
-    d1, nan_models = load_d(
-        file_list=file_list[s1], avg_err=True, probs=True, return_nan=True)
-    th.save(nan_models, f'inpca_results_all/nan_models_{s1}.p')
+    if s1 == 'end_points' or s2 == 'end_points':
+        d1 = th.load(file_list[s1])
+    else:
+        d1, nan_models = load_d(
+            file_list=file_list[s1], avg_err=True, probs=True, return_nan=True)
+        th.save(nan_models, f'inpca_results_all/nan_models_{s1}.p')
     if s1 == s2:
         d2 = d1
     else:
@@ -222,21 +225,22 @@ def main():
     for f in all_files:
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         file_list[(configs["seed"], configs["m"])].append(f)
+    file_list['end_points'] = os.path.join(loc, 'end_points.p')
 
-    load_list_ = list(file_list.keys())
-    load_list = list(combinations(load_list_, 2)) + \
-        [(load_list_[i], load_list_[i]) for i in range(len(load_list_))]
-
-    # load_list = []
-    # for (s1, s2) in load_list_:
-    #     if not os.path.exists(os.path.join('inpca_results', f"w_yh_{s1}_{s2}.p")) or not os.path.exists(os.path.join('inpca_results', f'didx_yh_{s1}_{s2}.p')):
-    #         load_list.append((s1, s2))
-    # print(load_list)
+    load_list = [('end_points', file) for file in file_list.keys()]
 
     mp.set_start_method('spawn')
-    with mp.Pool(processes=8) as pool:
+    with mp.Pool(processes=2) as pool:
         results = pool.map(
-            partial(get_idxs, file_list=file_list), load_list_, chunksize=1)
+            partial(process_pair, file_list=file_list), load_list, chunksize=1)
+
+    # load_list_ = list(file_list.keys())
+    # load_list = list(combinations(load_list_, 2)) + \
+    # [(load_list_[i], load_list_[i]) for i in range(len(load_list_))]
+    # mp.set_start_method('spawn')
+    # with mp.Pool(processes=8) as pool:
+    #     results = pool.map(
+    #         partial(get_idxs, file_list=file_list), load_list_, chunksize=1)
 
 
 def join():
@@ -284,30 +288,26 @@ def join():
         start_idx += bsize
 
 
-def project(fn='yh_all'):
+def project(seed=42, fn='yh_all', err_threshold=0.1):
     loc = "inpca_results_all"
     ne = 3
-    seed = 47
-    err_threshold = 0.1
 
-    didx = th.load(os.path.join(loc, f"didxs_{fn}.p"))
-    idx = get_idx(didx, f"seed=={seed}")
     folder = os.path.join(loc, str(seed))
     if not os.path.exists(folder):
         os.makedirs(folder)
     
     if os.path.isfile(os.path.join(folder, f'didx_{fn}.p')):
-        didx_ = th.load(os.path.join(folder, f'didx_{fn}.p'))
+        idx, didx = th.load(os.path.join(folder, f'didx_{fn}.p'))
     else:
-        didx_ = didx.iloc[idx]
         # filter out un-trained model
         idx = []
-        for (_, indices) in didx_.groupby(['m', 'opt', 'bs', 'aug', 'lr', 'wd']).indices.items():
-            if didx_.iloc[indices[-1]]['err'] < err_threshold:
+        didx = th.load(os.path.join(loc, f"didxs_{fn}.p"))
+        for (c, indices) in didx.groupby(['seed', 'm', 'opt', 'bs', 'aug', 'lr', 'wd']).indices.items():
+            if didx.iloc[indices[-1]]['err'] < err_threshold and c[0] == seed:
                 idx.extend(indices)
         idx = sorted(idx)
-        didx_ = didx.iloc[idx]
-        th.save(didx_, os.path.join(folder, f'didx_{fn}.p'))
+        didx = didx.iloc[idx]
+        th.save((idx, didx), os.path.join(folder, f'didx_{fn}.p'))
 
     f = h5py.File(os.path.join(loc, f'w_{fn}.h5'), 'r')
     w = f['w'][:, idx][idx, :]
@@ -322,21 +322,22 @@ def project(fn='yh_all'):
         r = proj_(w, n, ne)
         th.save(r, os.path.join(folder, f'r_{fn}.p'))
 
-    # project other random seeds
-    for s in range(42, 52):
-        ridx = get_idx(didx, f"seed=={s}")
-        cidx = get_idx(didx, f"seed=={seed}")
-        dp = f['w'][:, cidx][ridx, :]
-        q = lazy_embed(dp=dp, d_mean=d_mean, evals=r['e'], evecs=r['v'], ne=ne)
-        r['xp'] = np.vstack([r['xp'], q])
-        didx_ = pd.concat([didx_, didx.iloc[cidx]])
+    # [TODO] project other random seeds
+    # for s in range(42, 52):
+    #     ridx = get_idx(didx, f"seed=={s}")
+    #     cidx = get_idx(didx, f"seed=={seed}")
+    #     dp = f['w'][:, cidx][ridx, :]
+    #     q = lazy_embed(dp=dp, d_mean=d_mean, evals=r['e'], evecs=r['v'], ne=ne)
+    #     r['xp'] = np.vstack([r['xp'], q])
+    #     didx_ = pd.concat([didx_, didx.iloc[cidx]])
 
-    th.save(didx_, os.path.join(folder, f'didx_{fn}_all.p'))
-    th.save(r, os.path.join(folder, f'r_{fn}_all.p'))
+    # th.save(didx_, os.path.join(folder, f'didx_{fn}_all.p'))
+    # th.save(r, os.path.join(folder, f'r_{fn}_all.p'))
 
 
 if __name__ == '__main__':
     # main()
     # join()
-    project('yh_all')
-    project('yvh_all')
+    for seed in [42, 45, 49, 51]:
+        project(seed, 'yh_all')
+        project(seed, 'yvh_all')
