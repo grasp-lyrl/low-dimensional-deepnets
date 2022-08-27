@@ -2,7 +2,7 @@ from utils import *
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def plot3d(dc, r, dims=[0, 1, 2], key='widen', queries=[4, 8], markers=["o", "x", "s", "*", "+"],
+def plot3d(dc, r, dims=[0, 1, 2], key='widen', markers=["o", "x", "s", "*", "+"],
            cmap='vlag', cdict=None, ckey='', sdict={}):
     fig = plt.figure(1, figsize=(10, 10))
     ax = fig.add_subplot(projection='3d')
@@ -15,8 +15,7 @@ def plot3d(dc, r, dims=[0, 1, 2], key='widen', queries=[4, 8], markers=["o", "x"
         c = c.map(cdict)
         print(cdict)
     d1, d2, d3 = dims
-    for (i, k) in enumerate(queries):
-        ii = get_idx(dc, f'{key} == {k}')
+    for (i, (k, ii)) in enumerate(dc.groupby(key).indices.items()):
         xx = r['xp'][ii]
         s = sdict.get(k, 3)
         sc = ax.scatter(xx[:, d1], xx[:, d2], xx[:, d3],
@@ -34,7 +33,7 @@ def plot3d(dc, r, dims=[0, 1, 2], key='widen', queries=[4, 8], markers=["o", "x"
 #     ax.legend(handles, labels, loc = 'lower center')
 
 
-def triplot(dc, r, d=3, key='widen', queries=[4, 8], cmap='vlag', cdict=None, ckey='', sdict={},
+def triplot(dc, r, d=3, key='widen', cmap='vlag', cdict=None, ckey='', sdict={},
             markers=["o", "x", "s", "*", "+"],
             evals=False, plot_avg=False, avggroupby=['opt'], plot_lines=False):
 
@@ -50,9 +49,8 @@ def triplot(dc, r, d=3, key='widen', queries=[4, 8], cmap='vlag', cdict=None, ck
         for (i2, d2) in enumerate(range(d1+1, d)):
             ax = axs[d2-1, d1]
             ax.axis("square")
-            for (i, k) in enumerate(queries):
+            for (i, (k, ii)) in enumerate(dc.groupby(key).indices.items()):
                 s = sdict.get(k, 3)
-                ii = get_idx(dc, f'{key} == {k}')
                 xx = r['xp'][ii]
                 sc = ax.scatter(xx[:, d1], xx[:, d2],
                                 c=c[ii], cmap=cmap, vmin=c.min(), vmax=c.max(),
@@ -62,8 +60,9 @@ def triplot(dc, r, d=3, key='widen', queries=[4, 8], cmap='vlag', cdict=None, ck
                     config_cols = ['seed', 'm', 'opt', 'bs', 'aug', 'bn', 'lr', 'wd']
                     config_cols.remove(key)
                     dc_ = dc.iloc[ii]
-                    for (_, ii_) in dc_.groupby(config_cols).indices.items():
+                    for (c, ii_) in dc_.groupby(config_cols).indices.items():
                         xx_ = xx[ii_]
+                        print(dc_.iloc[ii_]['t'])
                         _ = sns.lineplot(x=xx_[:, d1], y=xx_[:, d2], ax=ax, legend=False, lw=0.2)
 
                     #                 sc = ax.plot(xx[:, d1], xx[:, d2], label=k, lw=0.5)
@@ -99,26 +98,30 @@ def triplot(dc, r, d=3, key='widen', queries=[4, 8], cmap='vlag', cdict=None, ck
 
 
 def main():
+    choices = {
+        'm': ["allcnn", "convmixer", "fc",
+              "vit", "wr-10-4-8", "wr-16-4-64"],
+        'opt': ["adam", "sgd", "sgdn"],
+        'lr' : [0.001, 0.1, 0.25, 0.5, 0.0005, 0.0025, 0.00125,
+     0.005],
+        'bs': [200, 500],
+        'aug': ['simple', 'none'],
+        'wd': [0., 1.e-03, 1.e-05]
+    }
 
-    models = ["'allcnn'", "'convmixer'", "'fc'",
-              "'vit'", "'wr-10-4-8'", "'wr-16-4-64'"]
-    opts = ["'adam'", "'sgd'", "'sgdn'"]
-    mdict = {m.strip("''"): i for (i, m) in enumerate(models)}
-    odict = {o.strip("''"): i for (i, o) in enumerate(opts)}
-
-    loc = 'inpca_results_all/49'
+    loc = 'inpca_results_all/47'
     fn = 'yh_all'
-    save_fn = 'lr_colors'
+    save_fn = "selected"
     key = 'm'
-    queries = models 
-    ckey = 'opt'
-    cmap = 'Set1'
-    cdict = odict
-    # cdict = {lr:i for (i, lr) in enumerate( )} 
+    ckey = 't'
+    cmap = 'vlag'
+    if ckey in choices.keys():
+        cdict = {c:i for (i, c) in enumerate(choices[ckey])}
+    else:
+        cdict = None
     plot_3d = False 
     tri_plot = True
-    plot_lines = False
-
+    plot_lines = True
 
     sns.set_style('whitegrid')
 
@@ -130,19 +133,19 @@ def main():
         tmax = dc.iloc[idxs]['t'].max()
         dc.loc[idxs, 't'] /= tmax
 
-    ii = get_idx(dc, "lr > 0.001")
+    ii = get_idx(dc, ' and '.join(f'{k} in {v}' for (k, v) in choices.items()))
     dc = dc.iloc[ii].reset_index()
     r['xp'] = r['xp'][ii]
     r['v'] = r['v'][ii, :]
     if plot_3d:
-        plot3d(dc, r, dims=[0, 1, 2], key=key, queries=queries,
+        plot3d(dc, r, dims=[0, 1, 2], key=key,
             ckey=ckey, cmap=cmap, cdict=cdict, markers=["o", "x", "s", ".", "*", "+"])
         plt.savefig(os.path.join(loc, f'{save_fn}_3d.png'), dpi=400)
     if tri_plot:
-        triplot(dc, r, d=4, key=key, queries=queries, ckey=ckey, cmap=cmap, cdict=cdict,
+        triplot(dc, r, d=4, key=key, ckey=ckey, cmap=cmap, cdict=cdict,
                 markers = ["o", "x", "s", ".", "*", "+"], plot_lines=plot_lines,
                 evals=True) 
-        plt.savefig(os.path.join(loc, f'{save_fn}_triplot.png'), dpi=400)
+        plt.savefig(os.path.join(loc, 'plots', f'{save_fn}_triplot.png'), dpi=400)
 
 if __name__ == '__main__':
     main()

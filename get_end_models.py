@@ -20,8 +20,8 @@ def main():
                       yvh=np.ones([len(yv), yv.max()+1])/(yv.max()+1))
                  ]
     extra_pts = pd.DataFrame(extra_pts)
-    extra_pts.reindex(columns=['seed', 'm', 'opt', 't', 'err', 'favg',
-                      'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd'], fill_value="None")
+    extra_pts = extra_pts.reindex(columns=['seed', 'm', 'opt', 't', 'err', 'favg',
+                      'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd', 'yh', 'yvh'], fill_value="None")
     th.save(extra_pts, os.path.join(loc, 'end_points.p'))
 
 

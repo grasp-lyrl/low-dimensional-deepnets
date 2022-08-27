@@ -227,7 +227,7 @@ def main():
         file_list[(configs["seed"], configs["m"])].append(f)
     file_list['end_points'] = os.path.join(loc, 'end_points.p')
 
-    load_list = [('end_points', file) for file in file_list.keys()]
+    load_list = [('end_points', f) for f in file_list.keys()]
 
     mp.set_start_method('spawn')
     with mp.Pool(processes=2) as pool:
@@ -336,8 +336,8 @@ def project(seed=42, fn='yh_all', err_threshold=0.1):
 
 
 if __name__ == '__main__':
-    # main()
+    main()
     # join()
-    for seed in [42, 45, 49, 51]:
-        project(seed, 'yh_all')
-        project(seed, 'yvh_all')
+    # for seed in [42, 45, 49, 51]:
+    #     project(seed, 'yh_all')
+    #     project(seed, 'yvh_all')
