@@ -38,28 +38,12 @@ def project(r, p, q, debug=False, mode='prod'):
             t_ = np.arccos(coss)
             t_[ii_] = 0
             return d1 + t_.sum(1)
-
-        def dd(t, n=1):
-            ti_ = ti[n:n+1, :]
-            ii_ = ii[n:n+1, :]
-            cost1_ = cost1[n:n+1, :]
-            cost2_ = cost2[n:n+1, :]
-            sinti_ = sinti[n:n+1, :]
-            coss = cost1_*np.sin((1-t)*ti_) / sinti_ + \
-                cost2_ * np.sin(t*ti_)/sinti_
-            if coss.max() > 1 or coss.min() < 0:
-                coss[coss > 1] = 1
-                coss[coss < 0] = 0
-            darccos = - 1. / (np.sqrt(1 - coss**2) + eps)
-            dcos = cost1_ / sinti_ * np.cos((1-t)*ti_) * (-ti_) + cost2_ / sinti_ * np.cos(t*ti_) * ti_
-            darccos[ii_] = 0
-            return (darccos * dcos).sum(1)
             
         lam = []
         for n in range(len(ti)):
             dn = partial(d, n=n)
             l = optimize.minimize_scalar(dn, bounds=(0, 1), method='bounded').x
-            lam.append(l)
+            lam.append(float(l))
     elif mode == 'mean':
         tan = cost2/(cost1*np.sqrt(1-cost**2)) - cost / np.sqrt(1-cost**2)
         lam = (np.arctan(tan) * (tan > 0)) / np.arccos(cost)
@@ -82,7 +66,7 @@ def gamma(t, p, q):
         p + np.sin(t*ti) / np.sin(ti) * q
     return gamma
 
-def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed']):
+def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh'):
     new_d = []
     configs = d.groupby(groups).indices
     ts = np.linspace(0, 1, (num_ts+1))[1:]
@@ -91,27 +75,29 @@ def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed']):
         for t in ts:
             data = {groups[i]: c[i] for i in range(len(c))}
             data['t'] = t
-            k1 = di[di['lam'] >= t]['t']
-            k2 = di[di['lam'] < t]['t']
-            ks = set(k2.index).intersection(
-                set(k1.index-1)).intersection(set(di.index[:-1]))
-            if len(ks) == 0:
-                # continue
-                ks = set(di.index[-1:]-1)
-            diff = 1
-            for k in ks:
-                p = np.sqrt(di.loc[k]['yh'])[None, :]
-                q = np.sqrt(di.loc[k+1]['yh'])[None, :]
-                r = gamma(t, ps, qs)
-                lam = float(project(r, p, q)[0])
-                if abs(lam-0.5) < diff:
-                    diff = abs(lam-0.5)
-                    data['yh'] = (gamma(lam, p, q) ** 2).squeeze()
-                    data['err'] = (np.argmax(data['yh'], axis=-1) != labels).mean()
-                    data['favg'] = -np.log(data['yh'])[np.arange(len(labels)), labels].mean()
-            print(c, t, k, lam, data['err'], data['favg'])
+            for key in ['yh', 'yvh']:
+                k1 = di[di[f'lam_{key}'] >= t]['t']
+                k2 = di[di[f'lam_{key}'] < t]['t']
+                ks = set(k2.index).intersection(
+                    set(k1.index-1)).intersection(set(di.index[:-1]))
+                if len(ks) == 0:
+                    ks = set(di.index[-1:]-1)
+                diff = 1
+                for k in ks:
+                    p = np.sqrt(di.loc[k][key])[None, :]
+                    q = np.sqrt(di.loc[k+1][key])[None, :]
+                    r = gamma(t, ps[key], qs[key])
+                    lam = project(r, p, q)[0]
+                    if abs(lam-0.5) < diff:
+                        diff = abs(lam-0.5)
+                        data[key] = (gamma(lam, p, q) ** 2).squeeze()
+                        errkey = 'err' if key == 'yh' else 'verr'
+                        fkey = 'favg' if key == 'yh' else 'vfavg'
+                        data[errkey] = (np.argmax(data[key], axis=-1) != labels[key]).mean()
+                        data[fkey] = -np.log(data[key])[np.arange(len(labels[key])), labels[key]].mean()
+                    print(c, t, k, lam, data[errkey], data[fkey])
             new_d.append(data)
-    return new_d
+    return pd.DataFrame(new_d)
 
 
 def main():
@@ -119,33 +105,43 @@ def main():
     all_files = glob.glob(os.path.join(loc, '*}.p'))
     file_list = []
     for f in all_files:
-        configs = json.loads(f[f.find('{'):f.find('}')+1])
-        if configs['seed'] == 47: 
+        load_fn = os.path.join('results/models/loaded', os.path.basename(f))
+        if not os.path.exists(load_fn):
             file_list.append(f)
-    print(len(file_list))
 
-    ds = get_data()['train']
-    y_ = np.array(ds.targets, dtype=np.int32)
-    y = np.zeros((y_.size, y_.max()+1))
-    y[np.arange(y_.size), y_] = 1
-    qs = np.sqrt(np.expand_dims(y, axis=0))
+    data = get_data()
+    labels = {}
+    qs = {}
+    ps = {}
+    for key in ['train', 'val']:
+        k = 'yh' if key == 'train' else 'yvh'
+        y_ = np.array(data[key].targets, dtype=np.int32)
+        y = np.zeros((y_.size, y_.max()+1))
+        y[np.arange(y_.size), y_] = 1
+        qs[k] = np.sqrt(np.expand_dims(y, axis=0))
+        ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
+        labels[k] = y_
 
     for f in tqdm(file_list):
-        save_fn = os.path.join('results/models/loaded', os.path.basename(f))
-        if os.path.exists(save_fn):
-            d = th.load(save_fn)
-            ps = np.sqrt(np.ones([1, 50000, 10]) / 10)
-            new_d = reparam(d, ps, qs, y_, num_ts=50,
-                            groups=['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd'])
-            th.save(new_d, save_fn)
+        load_fn = os.path.join('results/models/loaded', os.path.basename(f))
+        save_fn = os.path.join('results/models/reindexed', os.path.basename(f))
+        if not os.path.exists(load_fn):
+            d = load_d(file_list=[f], avg_err=True, probs=False)
         else:
-            d = load_d(file_list=[f], avg_err=True, probs=True)
-            if d is not None:
-                yhs = np.sqrt(np.stack(d['yh'].values))
-                ps = np.sqrt(np.ones_like(yhs) / 10)
-                qs_ = np.repeat(qs, yhs.shape[0], axis=0)
-                d['lam'] = project(yhs, ps, qs_)
-                th.save(d, save_fn)
+            d = th.load(load_fn)
+        if d is not None and 'lam' not in d.columns:
+            for key in ['yh', 'yvh']:
+                yhs = np.sqrt(np.exp(np.stack(d[key].values)))
+                qs_ = np.repeat(qs[key], yhs.shape[0], axis=0)
+                d[f'lam_{key}'] = project(yhs, ps[key], qs_)
+                th.save(d, load_fn)
+        elif d is None:
+            continue
+        for key in ['yh', 'yvh']:
+            d[key] = d.apply(lambda r: np.exp(r[key]), axis=1)
+        new_d = reparam(d, ps, qs, labels, num_ts=100,
+                        groups=['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd'])
+        th.save(new_d, save_fn)
 
 if __name__ == '__main__':
     main()

@@ -20,7 +20,8 @@ def plot3d(dc, r, dims=[0, 1, 2], key='widen', markers=["o", "x", "s", "*", "+"]
         s = sdict.get(k, 3)
         sc = ax.scatter(xx[:, d1], xx[:, d2], xx[:, d3],
                         c=c[ii], cmap=cmap, vmin=c.min(), vmax=c.max(),
-                        label=k,  marker=markers[i], s=s, lw=0.5, alpha=0.5)
+                        label=k,  marker=markers[i], s=s, lw=0.5, alpha=0.5,
+                        picker=True, pickradius=1)
 
         #                 sc = ax.plot(xx[:, d1], xx[:, d2], label=k, lw=0.5)
         ax.set_xlabel(f'pc{d1}, {ee[d1]:.2f}')
@@ -28,17 +29,28 @@ def plot3d(dc, r, dims=[0, 1, 2], key='widen', markers=["o", "x", "s", "*", "+"]
         ax.set_zlabel(f'pc{d3}, {ee[d3]:.2f}')
 
     handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, loc = 'lower center')
     clb = plt.colorbar(sc, pad=0.2, ax=ax)
     clb.ax.set_title(ckey)
-#     ax.legend(handles, labels, loc = 'lower center')
+    def onpick(event):
+        artist = event.artist
+        xdata = artist.get_xdata()
+        ydata = artist.get_ydata()
+        zdata = artist.get_zdata()
+        ind = event.ind
+        points = tuple(zip(xdata[ind], ydata[ind], zdata[ind]))
+        print('onpick points:', points)
+
+    fig.canvas.mpl_connect('pick_event', onpick)
+    plt.show()
 
 
 def triplot(dc, r, d=3, key='widen', cmap='vlag', cdict=None, ckey='', sdict={},
             markers=["o", "x", "s", "*", "+"],
-            evals=False, plot_avg=False, avggroupby=['opt'], plot_lines=False):
-
+            evals=False, plot_avg=False, avggroupby=['opt'], plot_lines=False,
+            ):
     figs, axs = plt.subplots(d-1, d-1, figsize=(10, 10),
-                             sharex=True, sharey=True)
+                            sharex=True, sharey=True)
     ee = r['e']
     c = dc[ckey]
     if cdict:
@@ -95,6 +107,7 @@ def triplot(dc, r, d=3, key='widen', cmap='vlag', cdict=None, ckey='', sdict={},
     clb.ax.set_title(ckey)
     ax = axs[0, -1]
     ax.legend(handles, labels, loc='lower center')
+    plt.show()
 
 
 def main():
@@ -119,8 +132,8 @@ def main():
         cdict = {c:i for (i, c) in enumerate(choices[ckey])}
     else:
         cdict = None
-    plot_3d = False 
-    tri_plot = True
+    plot_3d = True 
+    tri_plot = False
     plot_lines = True
 
     sns.set_style('whitegrid')
