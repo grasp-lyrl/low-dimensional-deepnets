@@ -6,6 +6,7 @@ import torch as th
 from itertools import combinations
 import torch.multiprocessing as mp
 from functools import partial
+from itertools import product
 import os
 import h5py
 import json
@@ -245,47 +246,67 @@ def main():
 
 def join():
     loc = 'inpca_results'
-    key = "yvh"
-    all_files = glob.glob(os.path.join('results/models/all', '*}.p'))
-    file_list = defaultdict(list)
-    for f in all_files:
-        configs = json.loads(f[f.find('{'):f.find('}')+1])
-        file_list[(configs["seed"], configs["m"])].append(f)
-
+    key = "yh"
+    seeds = range(42, 52)
+    m = ["allcnn", "convmixer", "fc", "vit", "wr-10-4-8", "wr-16-4-64"]
+    r_list = ['end_points']
+    c_list = list(product(seeds, m)) # existing 
     save_loc = 'inpca_results_all'
-    didxs = None
-    load_list = list(file_list.keys())
-    for i in range(len(load_list)):
-        s1 = load_list[i]
-        didxs_fname = os.path.join(loc, f"didx_{s1}.p")
-        didxs = pd.concat([didxs, th.load(didxs_fname)])
+
+    didxs_f = os.path.join(save_loc, f"didxs_{key}_all.p")
+    if os.path.exists(didxs_f):
+        didxs = th.load(didxs_f)
+    else:
+        didxs = None
+    indices = didxs.groupby(['seed', 'm']).indices
+    for r in r_list:
+        didx_ = th.load(os.path.join(loc, f"didx_{r}.p"))
+        didx_idx = didx_.groupby(['seed', 'm']).indices
+        for k in didx_idx.keys():
+            if indices.get(k) is None:
+                didxs = pd.concat([didxs, didx_.iloc[didx_idx[k]]])
         print(len(didxs))
-    th.save(didxs, os.path.join(save_loc, f"didxs_{key}_all.p"))
+    th.save(didxs, didxs_f)
 
-    f = h5py.File(os.path.join(save_loc, f'w_{key}_all.h5'), 'w')
-    dset = f.create_dataset("w", shape=(len(didxs), len(
-        didxs)), maxshape=(None, None), chunks=True)
-    start_idx = 0
-    for i in range(len(load_list)):
-        s1 = load_list[i]
-        w_fname = os.path.join(loc, f"w_{key}_{s1}_{s1}.p")
+    fname = os.path.join(save_loc, f'w_{key}_all.h5')
+    if os.path.exists(fname):
+        f = h5py.File(fname, 'r+')
+        dset = f['w']
+        dset.resize((len(r_list) + len(dset), len(r_list) + len(dset)))
+    else:
+        f = h5py.File(fname, 'w')
+        dset = f.create_dataset("w", shape=(len(didxs), len(
+            didxs)), maxshape=(None, None), chunks=True)
+
+    import ipdb; ipdb.set_trace()
+    for r in r_list:
+        w_fname = os.path.join(loc, f"w_{key}_{r}_{r}.p")
         w_ = th.load(w_fname)
-        bsize = len(w_)
-        dset[start_idx:start_idx+bsize, start_idx:start_idx+bsize] = w_
+        if r == 'end_points':
+            ridxs = list(indices[(0, 'true')]) + list(indices[(0, 'random')])
+        else:
+            ridxs = indices[r]
+        is_cts = lambda l : all((np.array(l[1:]) - np.array(l[:-1])) == 1)
+        assert is_cts(ridxs)
+        rstart, rend = ridxs[0], ridxs[-1]+1
+        dset[rstart:rend, rstart:rend] = w_
 
-        cidx = start_idx+bsize
-        for j in range(i+1, len(load_list)):
-            s2 = load_list[j]
-            print(s1, s2)
-            fname = os.path.join(loc, f"w_{key}_{s1}_{s2}.p")
-            w_ = th.load(fname)
-            l1, l2 = w_.shape
-            assert l1 == bsize  # debug
-            dset[start_idx:start_idx+bsize, cidx:cidx+l2] = w_
-            dset[cidx:cidx+l2, start_idx:start_idx+bsize] = w_.T
-            cidx += l2
-
-        start_idx += bsize
+        for c in c_list:
+            print(r, c)
+            fname = os.path.join(loc, f"w_{key}_{r}_{c}.p")
+            if os.path.exists(fname):
+                w_ = th.load(fname)
+            else:
+                continue
+            if c == 'end_points':
+                cidxs = indices[(0, 'true')] + indices[(0, 'random')]
+            else:
+                cidxs = indices[c]
+            assert is_cts(cidxs)    
+            cstart, cend = cidxs[0], cidxs[-1]+1
+            dset[rstart:rend, cstart:cend] = w_
+            dset[cstart:cend, rstart:rend] = w_.T
+    f.close()
 
 
 def project(seed=42, fn='yh_all', err_threshold=0.1):
@@ -336,8 +357,8 @@ def project(seed=42, fn='yh_all', err_threshold=0.1):
 
 
 if __name__ == '__main__':
-    main()
-    # join()
+    # main()
+    join()
     # for seed in [42, 45, 49, 51]:
     #     project(seed, 'yh_all')
     #     project(seed, 'yvh_all')
