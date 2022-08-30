@@ -5,6 +5,7 @@ import glob
 from functools import partial
 from utils import *
 
+
 def project(r, p, q, debug=False, mode='prod'):
     # r, p, q shape (nmodels, nsamples, nclasses)
     # p, q: start and end points of the geodesic
@@ -12,7 +13,8 @@ def project(r, p, q, debug=False, mode='prod'):
     eps = 1e-8
     if debug:
         assert np.allclose([(r**2).sum(-1), (p**2).sum(-1), (q**2).sum(-1)], 1)
-    cost, cost1, cost2 = (p*q).sum(-1, keepdims=True), (p*r).sum(-1, keepdims=True), (q*r).sum(-1, keepdims=True)
+    cost, cost1, cost2 = (p*q).sum(-1, keepdims=True), (p *
+                                                        r).sum(-1, keepdims=True), (q*r).sum(-1, keepdims=True)
     if mode == 'prod':
         if cost.max() > 1 or cost.min() < 0:
             cost[cost > 1] = 1
@@ -38,7 +40,7 @@ def project(r, p, q, debug=False, mode='prod'):
             t_ = np.arccos(coss)
             t_[ii_] = 0
             return d1 + t_.sum(1)
-            
+
         lam = []
         for n in range(len(ti)):
             dn = partial(d, n=n)
@@ -49,6 +51,7 @@ def project(r, p, q, debug=False, mode='prod'):
         lam = (np.arctan(tan) * (tan > 0)) / np.arccos(cost)
         lam[lam > 1] = 1
     return lam
+
 
 def gamma(t, p, q):
     # p, q shape: nmodels, nsamples, nclasses
@@ -65,6 +68,7 @@ def gamma(t, p, q):
     gamma[~mask, :] = np.sin((1-t)*ti) / np.sin(ti) * \
         p + np.sin(t*ti) / np.sin(ti) * q
     return gamma
+
 
 def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh'):
     new_d = []
@@ -93,8 +97,11 @@ def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh')
                         data[key] = (gamma(lam, p, q) ** 2).squeeze()
                         errkey = 'err' if key == 'yh' else 'verr'
                         fkey = 'favg' if key == 'yh' else 'vfavg'
-                        data[errkey] = (np.argmax(data[key], axis=-1) != labels[key]).mean()
-                        data[fkey] = -np.log(data[key])[np.arange(len(labels[key])), labels[key]].mean()
+                        data[errkey] = (
+                            np.argmax(data[key], axis=-1) != labels[key]).mean()
+                        data[fkey] = - \
+                            np.log(data[key])[np.arange(
+                                len(labels[key])), labels[key]].mean()
                     print(c, t, k, lam, data[errkey], data[fkey])
             new_d.append(data)
     return pd.DataFrame(new_d)
@@ -103,11 +110,12 @@ def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh')
 def main():
     loc = 'results/models/all'
     all_files = glob.glob(os.path.join(loc, '*}.p'))
-    file_list = []
-    for f in all_files:
-        load_fn = os.path.join('results/models/loaded', os.path.basename(f))
-        if not os.path.exists(load_fn):
-            file_list.append(f)
+    file_list = all_files
+    # file_list = []
+    # for f in all_files:
+    #     load_fn = os.path.join('results/models/loaded', os.path.basename(f))
+    #     if not os.path.exists(load_fn):
+    #         file_list.append(f)
 
     data = get_data()
     labels = {}
@@ -143,5 +151,38 @@ def main():
                         groups=['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd'])
         th.save(new_d, save_fn)
 
+
+def avg_by_reindex():
+    groups = ['aug', 'm', 'opt', 'bs', 'lr', 'wd']
+    didx = th.load(
+        '/home/ubuntu/results/inpca/inpca_results_all/didxs_yh_all.p')
+    indices = didx.groupby(groups).indices
+    loc = 'results/models/reindexed/'
+    for k in tqdm(indices.keys()):
+        if k[1] == 'random' or k[1] == 'true':
+            continue
+        d = None
+        for seed in range(42, 52):
+            fdict = dict(seed=seed, bseed=-1, aug=k[0],
+                     m=k[1], bn=True, drop=0.0, opt=k[2],
+                     bs=k[3], lr=k[4], wd=k[5])
+            fn = json.dumps(fdict).replace(' ', '')
+            if not os.path.exists(os.path.join(loc, f"{fn}.p")):
+                continue
+            else:
+                d_ = th.load(os.path.join(loc, f"{fn}.p"))
+                d = pd.concat([d, d_])
+        fdict['seed'] = -1
+        fn = os.path.join(loc, f"{json.dumps(fdict).replace(' ', '')}.p")
+        if os.path.exists(fn):
+            print('skip', fn)
+            continue
+        d_avg = avg_model(d, groupby=groups, update_d=False)
+        
+        print('saving ', fn)
+        th.save(d_avg, fn)
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    avg_by_reindex()

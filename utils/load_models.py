@@ -34,7 +34,7 @@ def get_idx(dd, cond):
 
 def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, \
     keys=['yh', 'yvh'], verbose=False, nmodels=-1, return_nan=False, loaded=False):
-    r = []
+    r = [] if not loaded else None
     nan_models = []
     count = 0
     nmodels = math.inf if nmodels < 0 else nmodels
@@ -42,7 +42,7 @@ def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, \
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         d_ = th.load(f)
         if loaded:
-            r.extend(d_)
+            r = pd.concat([r, d_])
         else:
             d = d_['data']
             if any(np.isnan(d[-1]['f'])):
@@ -74,10 +74,10 @@ def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, \
             d['vfavg'] = d.apply(lambda r: r.fv.mean().item(), axis=1)
 
         for k in keys:
-            if probs:
-                d[k] = d.apply(lambda r: th.exp(r[k]), axis=1)
             if numpy:
                 d[k] = d.apply(lambda r: r[k].numpy(), axis=1)
+            if probs:
+                d[k] = d.apply(lambda r: np.exp(r[k]), axis=1)
 
         if drop:
             d = drop_untrained(d, key='err', th=drop,

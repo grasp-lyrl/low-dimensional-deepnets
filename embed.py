@@ -194,46 +194,51 @@ def get_idxs(s, file_list, idx=None):
     th.save(didx, os.path.join('inpca_results', f'didx_{s}.p'))
     print(f'saved {s}')
 
-def process_pair(pair, file_list):
+def process_pair(pair, file_list, loc='inpca_results'):
     print(pair)
     s1, s2 = pair
     if s1 == 'end_points' or s2 == 'end_points':
         d1 = th.load(file_list[s1])
     else:
-        d1, nan_models = load_d(
-            file_list=file_list[s1], avg_err=True, probs=True, return_nan=True)
-        th.save(nan_models, f'inpca_results_all/nan_models_{s1}.p')
+        # d1, nan_models = load_d(
+            # file_list=file_list[s1], avg_err=True, probs=True, return_nan=True, loaded=loaded)
+        # th.save(nan_models, f'inpca_results_avg/nan_models_{s1}.p')
+        d1 = load_d(
+            file_list=file_list[s1], avg_err=False, probs=True, numpy=False, return_nan=False, loaded=True)
     if s1 == s2:
         d2 = d1
     else:
-        d2, nan_models = load_d(
-            file_list=file_list[s2], avg_err=True, probs=True, return_nan=True)
-        th.save(nan_models, f'inpca_results_all/nan_models_{s2}.p')
+        # d2, nan_models = load_d(
+            # file_list=file_list[s2], avg_err=False, probs=True, return_nan=True, loaded=True)
+        # th.save(nan_models, f'inpca_results_avg/nan_models_{s2}.p')
+        d2 = load_d(
+            file_list=file_list[s1], avg_err=False, probs=True, numpy=False, return_nan=False, loaded=True)
 
     for key in ['yh', 'yvh']:
         fn = f'{key}_{s1}_{s2}'
         idx = ['seed', 'm', 'opt', 't', 'err', 'favg',
-               'verr', 'vfavg', 'bs', 'aug', 'bn', 'lr', 'wd']
-        xembed(d1, d2, fn=fn, ss=slice(0, -1, 2), probs=True, key=key,
+               'verr', 'vfavg', 'bs', 'aug', 'lr', 'wd']
+        xembed(d1, d2, fn=fn, ss=slice(0, -1, 2), probs=True, key=key, loc=loc,
                idx=idx, force=False, distf='dbhat', reduction='mean', chunks=3600, proj=False)
 
 
 def main():
-
-    loc = 'results/models/all'
+    loc = 'results/models/reindexed'
     all_files = glob.glob(os.path.join(loc, '*}.p'))
     file_list = defaultdict(list)
     for f in all_files:
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         file_list[(configs["seed"], configs["m"])].append(f)
-    file_list['end_points'] = os.path.join(loc, 'end_points.p')
+    # file_list['end_points'] = os.path.join(loc, 'end_points.p')
 
-    load_list = [('end_points', f) for f in file_list.keys()]
+    load_list = product(file_list.keys(), file_list.keys())
+    for pair in load_list:
+        result = process_pair(pair, file_list, loc='inpca_results_avg')
 
     mp.set_start_method('spawn')
     with mp.Pool(processes=2) as pool:
         results = pool.map(
-            partial(process_pair, file_list=file_list), load_list, chunksize=1)
+            partial(process_pair, file_list=file_list, loc='inpca_results_avg'), load_list, chunksize=1)
 
     # load_list_ = list(file_list.keys())
     # load_list = list(combinations(load_list_, 2)) + \
@@ -248,7 +253,7 @@ def join():
     loc = 'inpca_results'
     key = "yh"
     seeds = range(42, 52)
-    m = ["allcnn", "convmixer", "fc", "vit", "wr-10-4-8", "wr-16-4-64"]
+    m = CHOICES['m']
     r_list = ['end_points']
     c_list = list(product(seeds, m)) # existing 
     save_loc = 'inpca_results_all'
@@ -278,7 +283,6 @@ def join():
         dset = f.create_dataset("w", shape=(len(didxs), len(
             didxs)), maxshape=(None, None), chunks=True)
 
-    import ipdb; ipdb.set_trace()
     for r in r_list:
         w_fname = os.path.join(loc, f"w_{key}_{r}_{r}.p")
         w_ = th.load(w_fname)
@@ -357,8 +361,8 @@ def project(seed=42, fn='yh_all', err_threshold=0.1):
 
 
 if __name__ == '__main__':
-    # main()
-    join()
+    main()
+    # join()
     # for seed in [42, 45, 49, 51]:
     #     project(seed, 'yh_all')
     #     project(seed, 'yvh_all')

@@ -111,25 +111,14 @@ def triplot(dc, r, d=3, key='widen', cmap='vlag', cdict=None, ckey='', sdict={},
 
 
 def main():
-    choices = {
-        'm': ["allcnn", "convmixer", "fc",
-              "vit", "wr-10-4-8", "wr-16-4-64"],
-        'opt': ["adam", "sgd", "sgdn"],
-        'lr' : [0.001, 0.1, 0.25, 0.5, 0.0005, 0.0025, 0.00125,
-     0.005],
-        'bs': [200, 500],
-        'aug': ['simple', 'none'],
-        'wd': [0., 1.e-03, 1.e-05]
-    }
-
     loc = 'inpca_results_all/47'
     fn = 'yh_all'
     save_fn = "selected"
     key = 'm'
     ckey = 't'
     cmap = 'vlag'
-    if ckey in choices.keys():
-        cdict = {c:i for (i, c) in enumerate(choices[ckey])}
+    if ckey in CHOICES.keys():
+        cdict = {c:i for (i, c) in enumerate(CHOICES[ckey])}
     else:
         cdict = None
     plot_3d = True 
@@ -146,7 +135,7 @@ def main():
         tmax = dc.iloc[idxs]['t'].max()
         dc.loc[idxs, 't'] /= tmax
 
-    ii = get_idx(dc, ' and '.join(f'{k} in {v}' for (k, v) in choices.items()))
+    ii = get_idx(dc, ' and '.join(f'{k} in {v}' for (k, v) in CHOICES.items()))
     dc = dc.iloc[ii].reset_index()
     r['xp'] = r['xp'][ii]
     r['v'] = r['v'][ii, :]

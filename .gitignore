@@ -18,3 +18,4 @@ inpca_results_all/*
 sgd_models.zip
 didxs_yvh_all.p
 notebooks/runs/*
+inpca_results_avg/*
