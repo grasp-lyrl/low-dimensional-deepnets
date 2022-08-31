@@ -130,7 +130,7 @@ def main():
         ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
         labels[k] = y_
 
-    for f in tqdm(file_list):
+    for f in tqdm.tqdm(file_list):
         load_fn = os.path.join('results/models/loaded', os.path.basename(f))
         save_fn = os.path.join('results/models/reindexed', os.path.basename(f))
         if not os.path.exists(load_fn):
@@ -158,7 +158,7 @@ def avg_by_reindex():
         '/home/ubuntu/results/inpca/inpca_results_all/didxs_yh_all.p')
     indices = didx.groupby(groups).indices
     loc = 'results/models/reindexed/'
-    for k in tqdm(indices.keys()):
+    for k in tqdm.tqdm(indices.keys()):
         if k[1] == 'random' or k[1] == 'true':
             continue
         d = None
@@ -174,13 +174,11 @@ def avg_by_reindex():
                 d = pd.concat([d, d_])
         fdict['seed'] = -1
         fn = os.path.join(loc, f"{json.dumps(fdict).replace(' ', '')}.p")
-        if os.path.exists(fn):
-            print('skip', fn)
-            continue
-        d_avg = avg_model(d, groupby=groups, update_d=False)
+
+        d_avg = avg_model(d, probs=True, groupby=groups, update_d=False)
         
         print('saving ', fn)
-        th.save(d_avg, fn)
+        th.save(d_avg['avg'], fn)
 
 
 if __name__ == '__main__':

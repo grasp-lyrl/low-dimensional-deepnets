@@ -15,7 +15,7 @@ def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0):
     np2, ns, _ = x2.size()
     print(np1, np2, ns)
     x1, x2 = x1.transpose(0, 1), x2.transpose(0, 1)
-    w = np.zeros([np1, np2])
+    w = th.zeros([np1, np2])
     if debug:
         assert th.allclose(x1.sum(-1), th.ones(ns, np1)) and th.allclose(x2.sum(-1), th.ones(ns, np2))
     chunks = chunks or 1
