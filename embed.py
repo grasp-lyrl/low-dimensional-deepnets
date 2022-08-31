@@ -229,25 +229,19 @@ def main():
     for f in all_files:
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         file_list[(configs["seed"], configs["m"])].append(f)
-    # file_list['end_points'] = os.path.join(loc, 'end_points.p')
 
-    load_list = product(file_list.keys(), file_list.keys())
-    for pair in load_list:
-        result = process_pair(pair, file_list, loc='inpca_results_avg')
+    load_list_ = product(file_list.keys(), file_list.keys())
+    load_list = []
+    for pair in load_list_:
+        s1, s2 = pair
+        if not os.path.exists(os.path.join('inpca_results_avg', f'didx_yh_{s1}_{s2}.p')):
+            load_list.append(pair)
+    print(len(load_list))
 
     mp.set_start_method('spawn')
     with mp.Pool(processes=2) as pool:
         results = pool.map(
             partial(process_pair, file_list=file_list, loc='inpca_results_avg'), load_list, chunksize=1)
-
-    # load_list_ = list(file_list.keys())
-    # load_list = list(combinations(load_list_, 2)) + \
-    # [(load_list_[i], load_list_[i]) for i in range(len(load_list_))]
-    # mp.set_start_method('spawn')
-    # with mp.Pool(processes=8) as pool:
-    #     results = pool.map(
-    #         partial(get_idxs, file_list=file_list), load_list_, chunksize=1)
-
 
 def join():
     loc = 'inpca_results'
@@ -328,7 +322,7 @@ def project(seed=42, fn='yh_all', err_threshold=0.1):
         idx = []
         didx = th.load(os.path.join(loc, f"didxs_{fn}.p"))
         for (c, indices) in didx.groupby(['seed', 'm', 'opt', 'bs', 'aug', 'lr', 'wd']).indices.items():
-            if didx.iloc[indices[-1]]['err'] < err_threshold and c[0] == seed:
+            if (didx.iloc[indices[-1]]['err'] < err_threshold and c[0] == seed) or c[0] == 0:
                 idx.extend(indices)
         idx = sorted(idx)
         didx = didx.iloc[idx]
@@ -365,4 +359,4 @@ if __name__ == '__main__':
     # join()
     # for seed in [42, 45, 49, 51]:
     #     project(seed, 'yh_all')
-    #     project(seed, 'yvh_all')
+    # project(47, 'yh_all')
