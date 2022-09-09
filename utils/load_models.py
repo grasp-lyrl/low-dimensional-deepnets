@@ -42,6 +42,8 @@ def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, \
         configs = json.loads(f[f.find('{'):f.find('}')+1])
         d_ = th.load(f)
         if loaded:
+            for c in configs:
+                d_ = d_.assign(**{c: configs[c]})
             r = pd.concat([r, d_])
         else:
             d = d_['data']

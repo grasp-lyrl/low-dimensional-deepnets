@@ -187,9 +187,76 @@ def project(seed=42, fn='yh_all', err_threshold=0.1, extra_points=None):
     th.save(r, os.path.join(folder, f'r_{fn}_all.p'))
 
 
+def compute_path_distance_(loc='results/models/reindexed', save_loc='inpca_results_avg',
+                          sym='mean', normalization='length', key='yh'):
+
+    all_files = glob.glob(os.path.join(loc, '*}.p'))
+    didx = None
+    idx = ['seed', 'm', 'opt', 't', 'err', 'favg',
+           'verr', 'vfavg', 'bs', 'aug', 'lr', 'wd']
+    dists = np.zeros([len(all_files), len(all_files)])
+    for i in tqdm.tqdm(range(len(all_files))):
+        d1 = load_d(file_list=all_files[i:i+1], avg_err=False,
+                    probs=False, numpy=False, return_nan=False, loaded=True)
+        didx = pd.concat([didx, d1[idx]])
+        th.save(didx, os.path.join(
+            save_loc, f'didx_{sym}_{normalization}_{key}.p'))
+        x1 = np.stack(d1[key])[None, :]
+        for j in range(i, len(all_files)):
+            d2 = load_d(file_list=all_files[j:j+1], avg_err=False,
+                        probs=False, numpy=False, return_nan=False, loaded=True)
+            x2 = np.stack(d2[key])[None, :]
+            if sym == 'none':
+                distxy, distyx = dt2t_batch(th.Tensor(x1), th.Tensor(
+                    x2), reduction='mean', sym=sym, normalization=normalization)
+                dists[i, j] = distxy.flatten().cpu().numpy()
+                dists[j, i] = distyx.flatten().cpu().numpy()
+            elif sym == 'pointwise':
+                dists[i, j] = dbhat(th.Tensor(x1.squeeze()), th.Tensor(x2.squeeze()), cross_terms=False).mean()
+            else:
+                dists[i, j] = dt2t_batch(th.Tensor(x1), th.Tensor(
+                    x2), reduction='mean', sym=sym, normalization=normalization).flatten().cpu().numpy()
+        th.save(dists, os.path.join(
+            save_loc, f'dists_{sym}_{normalization}_{key}.p'))
+
+def compute_path_distance(loc='results/models/reindexed', save_loc='inpca_results_avg', key='yh'):
+    all_files = np.array(glob.glob(os.path.join(loc, '*}.p')))
+    didx = None
+    idx = ['seed', 'm', 'opt', 't', 'err', 'favg',
+           'verr', 'vfavg', 'bs', 'aug', 'lr', 'wd']
+    # dists = np.zeros([len(all_files), len(all_files)])
+    dists = th.load(
+        '/home/ubuntu/results/inpca/inpca_results_avg/dists_pointwise_yh.p')
+    chunks = np.array_split(np.arange(len(all_files)), 50)
+    with tqdm.tqdm(total=len(chunks)**2//2) as pbar:
+        for i in tqdm.tqdm(range(46, len(chunks))):
+            i1 = chunks[i]
+            d1 = load_d(file_list=all_files[i1], avg_err=False,
+                        probs=False, numpy=False, return_nan=False, loaded=True)
+            t1 = d1.groupby(['t']).indices
+            # didx = pd.concat([didx, d1.iloc[t1[1.0]][idx]])
+            for j in tqdm.tqdm(range(i, len(chunks))):
+                i2 = chunks[j]
+                d2 = load_d(file_list=all_files[i2], avg_err=False,
+                        probs=False, numpy=False, return_nan=False, loaded=True)
+                t2 = d2.groupby(['t']).indices
+                w = np.zeros([len(i1), len(i2)])
+                for (t, ii) in t1.items():
+                    x1 = np.stack(d1.iloc[ii][key])
+                    x2 = np.stack(d2.iloc[t2[t]][key])
+                    w += dbhat(th.Tensor(x1), th.Tensor(x2), reduction='mean', chunks=50).numpy()
+                assert np.allclose(dists[i1[0]:i1[-1]+1, i2[0]:i2[-1]+1], 0)
+                dists[i1[0]:i1[-1]+1, i2[0]:i2[-1]+1] = w
+                pbar.update(1)
+                # th.save(didx, os.path.join(
+                #     save_loc, f'didx_pointwise_{key}.p'))
+                th.save(dists, os.path.join(
+                    save_loc, f'dists_pointwise_{key}.p'))
+
+
 if __name__ == '__main__':
     # compute_distance()
     # join()
     # for seed in [42, 45, 49, 51]:
     #     project(seed, 'yh_all')
-    project(47, 'yh_all', err_threshold=0.1, extra_points="seed == 42")
+    compute_path_distance()

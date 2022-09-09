@@ -107,15 +107,10 @@ def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh')
     return pd.DataFrame(new_d)
 
 
-def main():
+def compute_lambda():
     loc = 'results/models/all'
     all_files = glob.glob(os.path.join(loc, '*}.p'))
     file_list = all_files
-    # file_list = []
-    # for f in all_files:
-    #     load_fn = os.path.join('results/models/loaded', os.path.basename(f))
-    #     if not os.path.exists(load_fn):
-    #         file_list.append(f)
 
     data = get_data()
     labels = {}
@@ -152,35 +147,5 @@ def main():
         th.save(new_d, save_fn)
 
 
-def avg_by_reindex():
-    groups = ['aug', 'm', 'opt', 'bs', 'lr', 'wd']
-    didx = th.load(
-        '/home/ubuntu/results/inpca/inpca_results_all/didxs_yh_all.p')
-    indices = didx.groupby(groups).indices
-    loc = 'results/models/reindexed/'
-    for k in tqdm.tqdm(indices.keys()):
-        if k[1] == 'random' or k[1] == 'true':
-            continue
-        d = None
-        for seed in range(42, 52):
-            fdict = dict(seed=seed, bseed=-1, aug=k[0],
-                     m=k[1], bn=True, drop=0.0, opt=k[2],
-                     bs=k[3], lr=k[4], wd=k[5])
-            fn = json.dumps(fdict).replace(' ', '')
-            if not os.path.exists(os.path.join(loc, f"{fn}.p")):
-                continue
-            else:
-                d_ = th.load(os.path.join(loc, f"{fn}.p"))
-                d = pd.concat([d, d_])
-        fdict['seed'] = -1
-        fn = os.path.join(loc, f"{json.dumps(fdict).replace(' ', '')}.p")
-
-        d_avg = avg_model(d, probs=True, groupby=groups, update_d=False)
-        
-        print('saving ', fn)
-        th.save(d_avg['avg'], fn)
-
-
 if __name__ == '__main__':
-    # main()
-    avg_by_reindex()
+    pass

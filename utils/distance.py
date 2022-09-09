@@ -1,38 +1,40 @@
 from ensurepip import bootstrap
-import os
-import argparse
 import torch as th
 import numpy as np
 from itertools import product
 from functools import partial
 import tqdm
-from utils import load_d, avg_model, interpolate
 
-
-def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0):
+def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0, cross_terms=True):
     # x1, x2 shape (num_points, num_samples, num_classes)
     np1, ns, _ = x1.size()
     np2, ns, _ = x2.size()
-    print(np1, np2, ns)
-    x1, x2 = x1.transpose(0, 1), x2.transpose(0, 1)
-    w = th.zeros([np1, np2])
-    if debug:
-        assert th.allclose(x1.sum(-1), th.ones(ns, np1)) and th.allclose(x2.sum(-1), th.ones(ns, np2))
-    chunks = chunks or 1
-    for aa in tqdm.tqdm(th.chunk(th.arange(ns), chunks)):
-        xx1 = x1[aa, :].to(dev)
-        xx2 = x2[aa, :].to(dev)
-        aa = th.sqrt(aa)
-        w_ = -th.log(th.bmm(th.sqrt(xx1), th.sqrt(xx2).transpose(1, 2)))
-        w_[w_ == th.inf] = 100
-        w_[w_ < 0] = 0
-        if th.isnan(w_).sum()>0:
-            import ipdb; ipdb.set_trace()
-        w += w_.sum(0).cpu().numpy()
-    if reduction == 'mean':
-        return w / ns
+    if not cross_terms:
+        w = -th.log((th.sqrt(x1) * th.sqrt(x2)).sum(-1))
+        if reduction == 'mean':
+            return w.mean(-1)
+        else:
+            return w
     else:
-        return w
+        x1, x2 = x1.transpose(0, 1), x2.transpose(0, 1)
+        w = th.zeros([np1, np2])
+        if debug:
+            assert th.allclose(x1.sum(-1), th.ones(ns, np1)) and th.allclose(x2.sum(-1), th.ones(ns, np2))
+        chunks = chunks or 1
+        for aa in tqdm.tqdm(th.chunk(th.arange(ns), chunks)):
+            xx1 = x1[aa, :].to(dev)
+            xx2 = x2[aa, :].to(dev)
+            aa = th.sqrt(aa)
+            w_ = -th.log(th.bmm(th.sqrt(xx1), th.sqrt(xx2).transpose(1, 2)))
+            w_[w_ == th.inf] = 100
+            w_[w_ < 0] = 0
+            if th.isnan(w_).sum()>0:
+                import ipdb; ipdb.set_trace()
+            w += w_.sum(0).cpu().numpy()
+        if reduction == 'mean':
+            return w / ns
+        else:
+            return w
 
 
 def diskl(x1, x2, reduction='mean', probs=True, dev='cuda', chunks=0):
@@ -250,67 +252,69 @@ def pairwise_dist_batch(d, groups=['m', 'opt', 'seed'], dev='cuda', s=0.1, k='yh
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--s', type=float, default=0.0)
-    parser.add_argument('--batch', type=int, default=2)
-    parser.add_argument('--sym', type=str, default='mean')
-    parser.add_argument('--norm', type=str, default='length')
-    parser.add_argument('--bootstrap', action='store_true')
-    parser.add_argument('--interpolate', action='store_true')
-    args = parser.parse_args()
+    pass
+    # compute_distance()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--s', type=float, default=0.0)
+    # parser.add_argument('--batch', type=int, default=2)
+    # parser.add_argument('--sym', type=str, default='mean')
+    # parser.add_argument('--norm', type=str, default='length')
+    # parser.add_argument('--bootstrap', action='store_true')
+    # parser.add_argument('--interpolate', action='store_true')
+    # args = parser.parse_args()
 
 
-    loc = 'results/models/new'
-    fname = f'dist_{args.s}_{args.sym}_{args.norm}'
-    print(fname)
-    if args.bootstrap:
-        fname += '_bootstrap'
-    if args.interpolate:
-        fname += '_interpolate'
+    # loc = 'results/models/new'
+    # fname = f'dist_{args.s}_{args.sym}_{args.norm}'
+    # print(fname)
+    # if args.bootstrap:
+    #     fname += '_bootstrap'
+    # if args.interpolate:
+    #     fname += '_interpolate'
 
-    varying = {
-        "m": ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"],
-        "opt": ["adam", "sgdn", "sgd"]
-    }
-    fixed = {"aug": [True],
-             "wd": [0.0],
-             "bn": [True],
-             "bs": [200]}
+    # varying = {
+    #     "m": ["wr-4-8", "allcnn-96-144", "fc-1024-512-256-128"],
+    #     "opt": ["adam", "sgdn", "sgd"]
+    # }
+    # fixed = {"aug": [True],
+    #          "wd": [0.0],
+    #          "bn": [True],
+    #          "bs": [200]}
 
-    T = 45000
-    ts = []
-    for t in range(T):
-        if t < T//10:
-            if t % (T//100) == 0:
-                ts.append(t)
-        else:
-            if t % (T//10) == 0 or (t == T-1):
-                ts.append(t)
-    ts = np.array(ts)
-    pts = np.concatenate(
-        [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
+    # T = 45000
+    # ts = []
+    # for t in range(T):
+    #     if t < T//10:
+    #         if t % (T//100) == 0:
+    #             ts.append(t)
+    #     else:
+    #         if t % (T//10) == 0 or (t == T-1):
+    #             ts.append(t)
+    # ts = np.array(ts)
+    # pts = np.concatenate(
+    #     [np.arange(ts[i], ts[i+1], (ts[i+1]-ts[i]) // 5) for i in range(len(ts)-1)])
 
-    print("loading model")
-    d = load_d(loc, cond={**varying, **fixed}, avg_err=True, drop=False, probs=True)
+    # print("loading model")
+    # d = load_d(loc, cond={**varying, **fixed}, avg_err=True, drop=False, probs=True)
 
-    d = avg_model(d, groupby=list(varying.keys()) + ['t'], probs=True, get_err=True, bootstrap=args.bootstrap,
-                update_d=True, compute_distance=False, dev='cuda')['d']
-    columns = list(varying.keys()) + ['seed', 'avg']
-    if args.bootstrap:
-        columns += ['avg_idxs']
-    if args.interpolate:
-        d = interpolate(d, ts, pts, columns=columns, keys=['yh'], dev='cuda')
+    # d = avg_model(d, groupby=list(varying.keys()) + ['t'], probs=True, get_err=True, bootstrap=args.bootstrap,
+    #             update_d=True, compute_distance=False, dev='cuda')['d']
+    # columns = list(varying.keys()) + ['seed', 'avg']
+    # if args.bootstrap:
+    #     columns += ['avg_idxs']
+    # if args.interpolate:
+    #     d = interpolate(d, ts, pts, columns=columns, keys=['yh'], dev='cuda')
 
-    print("computing pairwise distance")
-    groups = list(varying.keys()) + ['seed'] # avg==True iff seed==-1
-    if args.bootstrap:
-        groups += ['avg_idxs']
+    # print("computing pairwise distance")
+    # groups = list(varying.keys()) + ['seed'] # avg==True iff seed==-1
+    # if args.bootstrap:
+    #     groups += ['avg_idxs']
 
-    # dists, configs = pairwise_dist(d, groups=groups, distf=dfrechet)
-    dists, configs = pairwise_dist_batch(d, groups=groups, s=args.s, batch=args.batch, sym=args.sym, normalization=args.norm)
-    symd = np.copy(dists)
-    symd[np.tril_indices(len(dists), -1)] = 0
-    symd = symd+ symd.T
+    # # dists, configs = pairwise_dist(d, groups=groups, distf=dfrechet)
+    # dists, configs = pairwise_dist_batch(d, groups=groups, s=args.s, batch=args.batch, sym=args.sym, normalization=args.norm)
+    # symd = np.copy(dists)
+    # symd[np.tril_indices(len(dists), -1)] = 0
+    # symd = symd+ symd.T
 
-    th.save({'dists': dists, 'symd': symd, 'configs': configs, 'groups': list(varying.keys()) + ['seed']},
-            os.path.join(loc, f'{fname}.p'))
+    # th.save({'dists': dists, 'symd': symd, 'configs': configs, 'groups': list(varying.keys()) + ['seed']},
+    #         os.path.join(loc, f'{fname}.p'))
