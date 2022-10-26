@@ -7,8 +7,7 @@ import tqdm
 
 def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0, cross_terms=True):
     # x1, x2 shape (num_points, num_samples, num_classes)
-    np1, ns, _ = x1.size()
-    np2, ns, _ = x2.size()
+    print(x1.shape, x2.shape)
     if not cross_terms:
         w = -th.log((th.sqrt(x1) * th.sqrt(x2)).sum(-1))
         if reduction == 'mean':
@@ -16,12 +15,14 @@ def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0, cross_ter
         else:
             return w
     else:
+        np1, ns, _ = x1.size()
+        np2, ns, _ = x2.size()
         x1, x2 = x1.transpose(0, 1), x2.transpose(0, 1)
-        w = th.zeros([np1, np2])
+        w = np.zeros([np1, np2])
         if debug:
-            assert th.allclose(x1.sum(-1), th.ones(ns, np1)) and th.allclose(x2.sum(-1), th.ones(ns, np2))
+            assert th.allclose(x1.sum(-1), th.ones(ns, np1).to(dev)) and th.allclose(x2.sum(-1), th.ones(ns, np2).to(dev))
         chunks = chunks or 1
-        for aa in tqdm.tqdm(th.chunk(th.arange(ns), chunks)):
+        for aa in (th.chunk(th.arange(ns), chunks)):
             xx1 = x1[aa, :].to(dev)
             xx2 = x2[aa, :].to(dev)
             aa = th.sqrt(aa)

@@ -8,12 +8,9 @@ import numpy as np
 import time
 import os
 import json
-from torch.utils.tensorboard import SummaryWriter
-writer = SummaryWriter()
-
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
-root = os.path.join('results', 'models', 'all')
+root = os.path.join('results', 'models', 'debug')
 
 
 def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2), fname=''):
@@ -61,14 +58,11 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
             lr = opt.param_groups[0]['lr']
             print('[%06d] f: %2.3f, acc: %2.2f, fv: %2.3f, accv: %2.2f, lr: %2.4f, time: %2.2f' %
                   (t, f, acc, fv, accv, lr, time.time()-start))
-            writer.add_scalar(f"{fname}/acc", acc, global_step=t)
-            writer.add_scalar(f"{fname}/loss", f, global_step=t)
-            writer.add_scalar(f"{fname}/accv", accv, global_step=t)
-            writer.add_scalar(f"{fname}/val_loss", fv, global_step=t)
-            writer.add_scalar(f"{fname}/lr", lr, global_step=t)
+
         m.train()
         return ss
 
+    scaler = th.cuda.amp.GradScaler()
     m.train()
     ss = []
     t = 0
@@ -84,8 +78,13 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
                 f = -th.gather(yyh, 1, y.view(-1, 1)).mean()
                 e = (y != th.argmax(yyh, dim=1).long()).float().mean()
 
-            f.backward()
-            opt.step()
+            if autocast:
+                scaler.scale(f).backward()
+                scaler.step(opt)
+                scaler.update()
+            else:
+                f.backward()
+                opt.step()
             sched.step()
             t += 1
             if epoch < 5 and i % (len(trainloader) // 4) == 0:
@@ -97,7 +96,6 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
             ss.append(helper(t))
         elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs-1):
             ss.append(helper(t))
-    writer.flush()
     return ss
 
 

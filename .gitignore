@@ -3,7 +3,7 @@ inpca_results/*
 *.pyc
 torun.txt
 *.txt
-.ipynb_checkpoints/*
+notebooks/.ipynb_checkpoints/*
 run.sh
 create_torun.py
 *.pdf
@@ -14,9 +14,11 @@ big_run.ipynb
 log*
 runs/*
 inpca_results_all/*
+inpca_results_avg_new/*
 *.h5
 sgd_models.zip
 didxs_yvh_all.p
 notebooks/runs/*
 inpca_results_avg/*
 notebooks/.ipynb_checkpoints/*
+create_adam_torun.py

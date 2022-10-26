@@ -24,7 +24,7 @@ for bs in [200, 500, 1000]:
                 ts[key].append(t)
             elif 25 < epoch <= 65 and epoch % 4 == 0:
                 ts[key].append(t)
-            elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs-1):
+            elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs - 1):
                 ts[key].append(t)
 
 
@@ -32,60 +32,84 @@ def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
 
 
-def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, \
-    keys=['yh', 'yvh'], verbose=False, nmodels=-1, return_nan=False, loaded=False):
+def get_row_idx(dd, row, idxs=None):
+    c = []
+    if idxs is not None:
+        dd = dd[idxs]
+        row = row[idxs]
+    for (k, v) in dict(row).items():
+        if isinstance(v, str):
+            v = f"'{v}'"
+        c.append(f"{k} == {v}")
+    c = " & ".join(c)
+    return get_idx(dd, c)
+
+
+def load_d(
+    file_list,
+    avg_err=False,
+    numpy=True,
+    probs=False,
+    drop=0,
+    keys=["yh", "yvh"],
+    verbose=False,
+    nmodels=-1,
+    return_nan=False,
+    loaded=False,
+):
     r = [] if not loaded else None
     nan_models = []
     count = 0
     nmodels = math.inf if nmodels < 0 else nmodels
     for f in file_list:
-        configs = json.loads(f[f.find('{'):f.find('}')+1])
+        configs = json.loads(f[f.find("{") : f.find("}") + 1])
         d_ = th.load(f)
+        if verbose:
+            print(f)
         if loaded:
             for c in configs:
                 d_ = d_.assign(**{c: configs[c]})
             r = pd.concat([r, d_])
         else:
-            d = d_['data']
-            if any(np.isnan(d[-1]['f'])):
+            d = d_["data"]
+            if any(np.isnan(d[-1]["f"])):
                 nan_models.append(configs)
                 continue
-            if verbose:
-                print(f, len(d))
             for i in range(len(d)):
                 t = {}
                 t.update(configs)
-                t.update({'epochs': getattr(d_['configs'], 'epochs')})
+                t.update({"epochs": getattr(d_["configs"], "epochs")})
                 if ts is not None:
-                    t_ = ts[(t['bs'], t['epochs'])][i]
+                    t_ = ts[(t["bs"], t["epochs"])][i]
                 else:
                     t_ = i
-                t.update({'t': t_})
+                t.update({"t": t_})
                 t.update(d[i])
                 r.append(t)
             count += 1
             if count > nmodels:
                 break
-    print(len(r))
+    if verbose:
+        print(len(r))
     if len(r) > 0:
         d = pd.DataFrame(r)
         if avg_err:
-            d['err'] = d.apply(lambda r: r.e.mean().item(), axis=1)
-            d['verr'] = d.apply(lambda r: r.ev.mean().item(), axis=1)
-            d['favg'] = d.apply(lambda r: r.f.mean().item(), axis=1)
-            d['vfavg'] = d.apply(lambda r: r.fv.mean().item(), axis=1)
+            d["err"] = d.apply(lambda r: r.e.mean().item(), axis=1)
+            d["verr"] = d.apply(lambda r: r.ev.mean().item(), axis=1)
+            d["favg"] = d.apply(lambda r: r.f.mean().item(), axis=1)
+            d["vfavg"] = d.apply(lambda r: r.fv.mean().item(), axis=1)
 
         for k in keys:
             if numpy:
                 d[k] = d.apply(lambda r: r[k].numpy(), axis=1)
-            if probs:
+            if (d[k].iloc[0] < 0).any():
                 d[k] = d.apply(lambda r: np.exp(r[k]), axis=1)
 
         if drop:
-            d = drop_untrained(d, key='err', th=drop,
-                               verbose=True).reset_index()
+            d = drop_untrained(d, key="err", th=drop, verbose=True).reset_index()
 
-        print(d.keys(), len(d))
+        if verbose:
+            print(d.keys(), len(d))
         del r
 
         if return_nan:
@@ -94,14 +118,14 @@ def load_d(file_list, avg_err=False, numpy=True, probs=False, drop=0, \
             return d
 
 
-def drop_untrained(dd, key='err', end_t=None, th=0.01, verbose=False):
-    tmax = end_t or [dd['t'].max()]
+def drop_untrained(dd, key="err", end_t=None, th=0.01, verbose=False):
+    tmax = end_t or [dd["t"].max()]
     idxs = {t: get_idx(dd, f"t == {t} & {key} > {th}") for t in tmax}
     iis = []
     for (t, ii) in idxs.items():
         for i in ii:
-            iis += list(range(i-t, i+1, 1))
+            iis += list(range(i - t, i + 1, 1))
     if verbose:
         print(len(ii))
-        print(dd[['m', 'opt', 'bn', 'seed']].iloc[ii])
+        print(dd[["m", "opt", "bn", "seed"]].iloc[ii])
     return dd.drop(iis)

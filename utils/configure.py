@@ -122,8 +122,8 @@ def get_data(data_args={'data':'CIFAR10', 'aug':'none', 'sub_sample':0}, resize=
     else:
         assert False
 
-    ds = {'train': f('../data', train=True, download=False, transform=transform_train),
-          'val': f('../data', train=False, download=False, transform=transform_test)}
+    ds = {'train': f('/home/ubuntu/ext_vol/data', train=True, download=False, transform=transform_train),
+          'val': f('/home/ubuntu/ext_vol/data', train=False, download=False, transform=transform_test)}
 
     # subsample the dataset, make sure it is balanced
     if sub_sample > 0:

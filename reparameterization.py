@@ -13,32 +13,27 @@ def project(r, p, q, debug=False, mode='prod'):
     eps = 1e-8
     if debug:
         assert np.allclose([(r**2).sum(-1), (p**2).sum(-1), (q**2).sum(-1)], 1)
-    cost, cost1, cost2 = (p*q).sum(-1, keepdims=True), (p *
-                                                        r).sum(-1, keepdims=True), (q*r).sum(-1, keepdims=True)
+    cost = np.clip((p*q).sum(-1, keepdims=True), 0, 1)
+    cost1 = np.clip((p*r).sum(-1, keepdims=True), 0, 1)
+    cost2 = np.clip((q*r).sum(-1, keepdims=True), 0, 1)
+
     if mode == 'prod':
-        if cost.max() > 1 or cost.min() < 0:
-            cost[cost > 1] = 1
-            cost[cost < 0] = 0
         ti = np.arccos(cost)
-        d1 = np.arccos(cost1[ti == 0]).sum()
+        mask = ti < eps
+        d1 = np.arccos(cost1[mask]).sum()
         sinti = np.sin(ti)
-        ii = sinti == 0
-        sinti[ii] += eps
 
         def d(t, n=1):
-            cost1_ = cost1[n:n+1, :]
-            ti_ = ti[n:n+1, :]
-            ii_ = ii[n:n+1, :]
-            cost1_ = cost1[n:n+1, :]
-            cost2_ = cost2[n:n+1, :]
-            sinti_ = sinti[n:n+1, :]
+            maskn = mask[n, :]
+            cost1_ = cost1[n:n+1, ~maskn]
+            ti_ = ti[n:n+1, ~maskn]
+            cost1_ = cost1[n:n+1, ~maskn]
+            cost2_ = cost2[n:n+1, ~maskn]
+            sinti_ = sinti[n:n+1, ~maskn]
             coss = cost1_*np.sin((1-t)*ti_) / sinti_ + \
                 cost2_ * np.sin(t*ti_)/sinti_
-            if coss.max() > 1 or coss.min() < 0:
-                coss[coss > 1] = 1
-                coss[coss < 0] = 0
+            coss = np.clip(coss, 0, 1)
             t_ = np.arccos(coss)
-            t_[ii_] = 0
             return d1 + t_.sum(1)
 
         lam = []
@@ -49,18 +44,16 @@ def project(r, p, q, debug=False, mode='prod'):
     elif mode == 'mean':
         tan = cost2/(cost1*np.sqrt(1-cost**2)) - cost / np.sqrt(1-cost**2)
         lam = (np.arctan(tan) * (tan > 0)) / np.arccos(cost)
-        lam[lam > 1] = 1
+        lam = np.clip(lam, 0, 1)
+
     return lam
 
 
 def gamma(t, p, q):
     # p, q shape: nmodels, nsamples, nclasses
-    cospq = (p*q).sum(-1)
-    if cospq.max() > 1 or cospq.min() < 0:
-        cospq[cospq > 1] = 1
-        cospq[cospq < 0] = 0
+    cospq = np.clip((p*q).sum(-1), 0, 1)
     ti = np.arccos(cospq)
-    mask = ti == 0
+    mask = ti < 1e-8
     gamma = np.zeros_like(p)
     gamma[mask, :] = p[mask, :]
     p, q = p[~mask, :], q[~mask, :]
@@ -70,47 +63,76 @@ def gamma(t, p, q):
     return gamma
 
 
-def reparam(d, ps, qs, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh'):
+def reparam(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh'):
     new_d = []
     configs = d.groupby(groups).indices
     ts = np.linspace(0, 1, (num_ts+1))[1:]
     for (c, idx) in configs.items():
         di = d.iloc[idx]
+        ind = {'yh': di.index.min(), 'yvh': di.index.min()}
+        max_ind = di.index.max()
         for t in ts:
             data = {groups[i]: c[i] for i in range(len(c))}
             data['t'] = t
             for key in ['yh', 'yvh']:
-                k1 = di[di[f'lam_{key}'] >= t]['t']
-                k2 = di[di[f'lam_{key}'] < t]['t']
-                ks = set(k2.index).intersection(
-                    set(k1.index-1)).intersection(set(di.index[:-1]))
-                if len(ks) == 0:
-                    ks = set(di.index[-1:]-1)
-                diff = 1
-                for k in ks:
-                    p = np.sqrt(di.loc[k][key])[None, :]
-                    q = np.sqrt(di.loc[k+1][key])[None, :]
-                    r = gamma(t, ps[key], qs[key])
-                    lam = project(r, p, q)[0]
-                    if abs(lam-0.5) < diff:
-                        diff = abs(lam-0.5)
-                        data[key] = (gamma(lam, p, q) ** 2).squeeze()
-                        errkey = 'err' if key == 'yh' else 'verr'
-                        fkey = 'favg' if key == 'yh' else 'vfavg'
-                        data[errkey] = (
-                            np.argmax(data[key], axis=-1) != labels[key]).mean()
-                        data[fkey] = - \
-                            np.log(data[key])[np.arange(
-                                len(labels[key])), labels[key]].mean()
-                    print(c, t, k, lam, data[errkey], data[fkey])
+                k = ind[key]
+                while k < max_ind:
+                    if di.iloc[k][f'lam_{key}'] > t:
+                        break
+                    k += 1
+                if k == max_ind:
+                    end_lam = 1
+                else:
+                    end_lam = di.iloc[k][f'lam_{key}']
+                ind[key] = k
+                start = di.iloc[max(0, k-1)]
+                end = di.iloc[k]
+
+                if abs(end_lam - start[f'lam_{key}']) < 1e-8:
+                    import ipdb; ipdb.set_trace()
+                lam_interp = (t - start[f'lam_{key}']) / (end_lam - start[f'lam_{key}'])
+                lam_interp = np.clip(lam_interp, 0, 1)
+                r = gamma(lam_interp, np.sqrt(start[key])[None, :], np.sqrt(end[key])[None, :])
+                data[key] = (r ** 2).squeeze()
+                errkey = 'err' if key == 'yh' else 'verr'
+                fkey = 'favg' if key == 'yh' else 'vfavg'
+                data[errkey] = (
+                    np.argmax(data[key], axis=-1) != labels[key]).mean()
+                data[fkey] = - \
+                    np.log(data[key])[np.arange(
+                        len(labels[key])), labels[key]].mean()
             new_d.append(data)
     return pd.DataFrame(new_d)
+                ##################### old #########################
+                # diff = 1
+                # for k in ks:
+                #     p = np.sqrt(di.loc[k][key])[None, :]
+                #     q = np.sqrt(di.loc[k+1][key])[None, :]
+                #     r = gamma(t, ps[key], qs[key])
+                #     lam = project(r, p, q)[0]
+                #     if abs(lam-0.5) < diff:
+                #         diff = abs(lam-0.5)
+                #         data[key] = (gamma(lam, p, q) ** 2).squeeze()
+                #         errkey = 'err' if key == 'yh' else 'verr'
+                #         fkey = 'favg' if key == 'yh' else 'vfavg'
+                #         data[errkey] = (
+                #             np.argmax(data[key], axis=-1) != labels[key]).mean()
+                #         data[fkey] = - \
+                #             np.log(data[key])[np.arange(
+                #                 len(labels[key])), labels[key]].mean()
+                #     print(c, t, k, lam, data[errkey], data[fkey])
+                ##################### old #########################
 
 
 def compute_lambda():
     loc = 'results/models/all'
+    force = False 
     all_files = glob.glob(os.path.join(loc, '*}.p'))
-    file_list = all_files
+    file_list = []
+    for f in all_files:
+        configs = json.loads(f[f.find('{'):f.find('}')+1])
+        if configs['corner'] == 'normal':
+            file_list.append(f)
 
     data = get_data()
     labels = {}
@@ -127,25 +149,34 @@ def compute_lambda():
 
     for f in tqdm.tqdm(file_list):
         load_fn = os.path.join('results/models/loaded', os.path.basename(f))
-        save_fn = os.path.join('results/models/reindexed', os.path.basename(f))
+        save_fn = os.path.join('results/models/reindexed_new', os.path.basename(f))
+        if os.path.exists(save_fn) and not force:
+            continue
         if not os.path.exists(load_fn):
             d = load_d(file_list=[f], avg_err=True, probs=False)
         else:
-            d = th.load(load_fn)
-        if d is not None and 'lam' not in d.columns:
+            try:
+                d = th.load(load_fn)
+            except:
+                print(load_fn)
+                continue
+        if d is not None:
             for key in ['yh', 'yvh']:
+                if f'lam_{key}' in d.columns:
+                    continue
                 yhs = np.sqrt(np.exp(np.stack(d[key].values)))
                 qs_ = np.repeat(qs[key], yhs.shape[0], axis=0)
-                d[f'lam_{key}'] = project(yhs, ps[key], qs_)
+                ps_ = np.repeat(ps[key], yhs.shape[0], axis=0)
+                d[f'lam_{key}'] = project(yhs, ps_, qs_)
                 th.save(d, load_fn)
-        elif d is None:
+        else:
             continue
         for key in ['yh', 'yvh']:
             d[key] = d.apply(lambda r: np.exp(r[key]), axis=1)
-        new_d = reparam(d, ps, qs, labels, num_ts=100,
+        new_d = reparam(d, labels, num_ts=100,
                         groups=['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd'])
         th.save(new_d, save_fn)
 
 
 if __name__ == '__main__':
-    pass
+    compute_lambda()
