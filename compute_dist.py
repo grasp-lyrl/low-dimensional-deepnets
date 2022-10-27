@@ -328,29 +328,28 @@ if __name__ == "__main__":
     ##############################
     # join the distance matrices #
     ##############################
-    didx = th.load('/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_yh_all.p')
-    cols = ['seed', 'm', 'opt', 'bs', 'aug', 'lr', 'wd', 't']
-    didx['lr'] = didx['lr'].astype(str)
-    didx['wd'] = didx['wd'].astype(str)
-    didx = didx.reset_index(drop=False)
+    cols = ['seed', 'm', 'opt', 't', 'bs', 'aug',  'lr', 'wd']
+    dall = th.load('/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all.p').reset_index(drop=True)
+    dall = dall.reset_index(drop=False)
+
+    d = th.load('/home/ubuntu/ext_vol/inpca/inpca_results/didx_yh_geod_c0.p')['dc']
+    w = th.load('/home/ubuntu/ext_vol/inpca/inpca_results/w_yh_geod_c0.p')
+    for i in range(100, 2300, 100):
+        d = pd.concat([d, th.load(f'inpca_results/didx_yh_geod_c{i}.p')['dc']])
+        w = np.hstack([w, th.load(f'inpca_results/w_yh_geod_c{i}.p')])
+    mask = d[cols].duplicated(keep='first')
+    d = d[~mask]
+    w = w[:, ~mask]
+    d = d.reset_index(drop=True)
+    d = d.reset_index(drop=False)
+    
+    dmerged = pd.merge(dall, d, on=cols, how='inner')
+    ii = dmerged['index_y'].values
 
     f = h5py.File('/home/ubuntu/ext_vol/inpca/inpca_results_all/w_yh_all_geod.h5', 'r+')
-    w = f['w']
-    for i in tqdm.tqdm(range(1900, 2000, 100)):
-        di = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/didx_yh_geod_c{i}.p')['dc']
-        wi = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/w_yh_geod_c{i}.p')
-        if 'geodesic' in di.m.unique():
-            idxs = get_idx(di, "seed == 0")
-            w[-100:, -100:] = wi[:, idxs]
-            di = di[di.seed > 0].reset_index(drop=True)
-        for key in ['seed', 'bs', 't']:
-            di[key] = di[key].astype(int)
-        for key in ['lr', 'wd']:
-            di[key] = di[key].astype(str)
-        idxs = np.array(pd.merge(didx, di, on=cols)['index'])
-        ii = np.argsort(idxs)
-        w[-100:, ][:, idxs[ii]] = wi[:, ii]
-        w[idxs[ii], :][:, -100:] = wi[:, ii].T
+    wall = f['w']
+    wall[-100:, :] = w[:, ii]
+    wall[:, -100:] = w[:, ii].T
     f.close()
 
     ################################################
