@@ -64,11 +64,16 @@ def diskl(x1, x2, reduction='mean', probs=True, dev='cuda', chunks=0):
 
 
 
-def dinpca(x1, x2, sign=1, dev='cuda', sqrt=False):
+def dinpca(x1, x2=None, sign=1, dev='cuda', sqrt=False):
     # x1, x2  shape (nmodels, ncoords)
     # sign (ncoords, ), sign of each coordinate
-    x1, x2, sign = x1.to(dev), x2.to(dev), sign.to(dev)
-    d = (((x1[None, ...] - x2[:, None, ...])**2) * sign.reshape(1, 1, -1)).sum(-1)
+    x1, sign = x1.to(dev), sign.to(dev)
+    if x2 is None:
+        B = x1 @ th.diag(sign) @ x1.T
+        d = th.diag(B).repeat(len(x1), 1) + th.diag(B).repeat(len(x1), 1).T - 2*B
+    else:
+        x2 = x2.to(dev)
+        d = (((x1[None, ...] - x2[:, None, ...])**2) * sign.reshape(1, 1, -1)).sum(-1)
     if sqrt:
         return th.sqrt(th.maximum(d, th.zeros_like(d)))
     return d

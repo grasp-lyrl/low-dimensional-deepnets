@@ -46,26 +46,22 @@ def process_pair(pair, file_list, loc="inpca_results", keys=["yh"], save_didx=Fa
     dist_from_flist(file_list[s1], file_list[s2], keys, loc, f"{s1}_{s2}", save_didx)
 
 
-def dist_from_flist(f1, f2, keys=["yh", "yvh"], loc="", fn="", save_didx=False):
+def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="", loaded=False, save_didx=False):
     d1 = load_d(
         file_list=f1,
-        avg_err=False,
-        probs=False,
-        numpy=False,
-        return_nan=False,
-        loaded=True,
+        avg_err=True,
+        numpy=loaded,
+        loaded=loaded,
     )
-    if f1 == f2:
-        d2 = d1
-    else:
+    if f2 is not None:
         d2 = load_d(
             file_list=f2,
-            avg_err=False,
-            probs=False,
-            numpy=False,
-            return_nan=False,
-            loaded=True,
+            avg_err=True,
+            numpy=loaded,
+            loaded=loaded,
         )
+    else:
+        d2 = None
     for key in keys:
         idx = ["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"]
         xembed(
@@ -232,10 +228,10 @@ def compute_path_distance(
     key="yh",
     fn="pointwise",
     T=100,
+    force=False,
 ):
     if all_files is None:
         all_files = glob.glob(os.path.join(loc, "*}.p"))
-        all_files.sort(key=os.path.getmtime)
         all_files = np.array(all_files)
     idx = ["seed", "m", "opt", "err", "verr", "bs", "aug", "lr", "wd"]
     if load:
@@ -319,38 +315,61 @@ if __name__ == "__main__":
     ################################
     # compute distance to geodesic #
     ################################
-    # file_list = glob.glob('results/models/loaded/*}.p')
-    # geod = 'results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na"}.p'
+    fn = ''
+    all_file = glob.glob('results/models/loaded/*}.p')
+    flist = []
+    for f in all_file:
+        if 'geodesic' in f or '52' in f:
+            print(f)
+            continue
+        flist.append(f)
+    geod = '/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na"}.p'
 
-    # for i in range(0, len(file_list), 100):
-    #     dist_from_flist([geod], file_list[i:i+100], loc='inpca_results', fn=f'geod_c{i}', save_didx=True)
+    dist_from_flist([geod], [geod], loc='inpca_results', fn=f'{fn}geod_geod', save_didx=True)
+    # for i in range(0, len(flist), 100):
+    #     dist_from_flist([geod], flist[i:i+100], loc='inpca_results', fn=f'{fn}geod_c{i}', save_didx=True)
 
     ##############################
     # join the distance matrices #
     ##############################
-    cols = ['seed', 'm', 'opt', 't', 'bs', 'aug',  'lr', 'wd']
-    dall = th.load('/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all.p').reset_index(drop=True)
-    dall = dall.reset_index(drop=False)
+    # fn = ''
+    # key = "yh"
+    # cols = ['seed', 'm', 'opt', 't', 'bs', 'aug',  'lr', 'wd']
+    # dall = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_{key}_all.p').reset_index(drop=True)
+    # dgeod = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/didx_{key}_{fn}geod_c0.p')['dr']
+    # dall = pd.concat([dall, dgeod], ignore_index=True)
+    # dall = dall.reset_index(drop=False)
 
-    d = th.load('/home/ubuntu/ext_vol/inpca/inpca_results/didx_yh_geod_c0.p')['dc']
-    w = th.load('/home/ubuntu/ext_vol/inpca/inpca_results/w_yh_geod_c0.p')
-    for i in range(100, 2300, 100):
-        d = pd.concat([d, th.load(f'inpca_results/didx_yh_geod_c{i}.p')['dc']])
-        w = np.hstack([w, th.load(f'inpca_results/w_yh_geod_c{i}.p')])
-    mask = d[cols].duplicated(keep='first')
-    d = d[~mask]
-    w = w[:, ~mask]
-    d = d.reset_index(drop=True)
-    d = d.reset_index(drop=False)
+    # d = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/didx_{key}_{fn}geod_c0.p')['dc']
+    # w = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/w_{key}_{fn}geod_c0.p')
+    # for i in range(100, 2300, 100):
+    #     di = th.load(f'inpca_results/didx_{key}_{fn}geod_c{i}.p')['dc'].reset_index(drop=True)
+    #     wi = th.load(f'inpca_results/w_{key}_{fn}geod_c{i}.p')
+    #     if len(di) != w.shape[1]:
+    #         wi = wi[:, di.index]
+    #     d = pd.concat([d, di])
+    #     w = np.hstack([w, wi])
+
+    # mask = d[cols].duplicated(keep='first')
+    # d = d[~mask]
+    # w = w[:, ~mask]
+    # d = d.reset_index(drop=True)
+    # d = d.reset_index(drop=False)
     
-    dmerged = pd.merge(dall, d, on=cols, how='inner')
-    ii = dmerged['index_y'].values
+    # d['t'] = d['t'].astype(float)
+    # d[cols] = d[cols].astype(str)
+    # dall[cols] = dall[cols].astype(str)
+    # dmerged = pd.merge(dall, d, on=cols, how='inner')
+    # ii = dmerged['index_y'].values
 
-    f = h5py.File('/home/ubuntu/ext_vol/inpca/inpca_results_all/w_yh_all_geod.h5', 'r+')
-    wall = f['w']
-    wall[-100:, :] = w[:, ii]
-    wall[:, -100:] = w[:, ii].T
-    f.close()
+    # f = h5py.File(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/w_{key}_all_geod.h5', 'r+')
+    # wall = f['w']
+    # if wall.shape[0] != len(dall):
+    #     f['w'].resize([len(dall), len(dall)])
+    # wall[-len(dgeod):, :] = w[:, ii]
+    # wall[:, -len(dgeod):] = w[:, ii].T
+    # # wall[-len(dgeod):, -len(dgeod):] = th.load(f'inpca_results/w_{key}_{fn}geod_geod.p')
+    # f.close()
 
     ################################################
     # compute pairwise distance for particle & avg #
@@ -370,13 +389,13 @@ if __name__ == "__main__":
     ##################################################
     # compute 3d distance tensor, including geodesic #
     ##################################################
-    all_files = glob.glob(os.path.join("results/models/reindexed_new", "*}.p"))
-    all_files = np.array(all_files)
+    # all_files = glob.glob(os.path.join("results/models/reindexed_new", "*}.p"))
+    # all_files = np.array(all_files)
 
-    compute_path_distance(
-        all_files=all_files,
-        loc="results/models/reindexed_new",
-        save_loc="inpca_results_avg_new",
-        load=True,
-        fn="3d_geod",
-    )
+    # compute_path_distance(
+    #     all_files=all_files,
+    #     loc="results/models/reindexed_new",
+    #     save_loc="inpca_results_avg_new",
+    #     load=True,
+    #     fn="3d_geod",
+    # )

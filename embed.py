@@ -40,7 +40,7 @@ def xembed(
     idx = idx or ["seed", "widen", "numc", "t", "err", "verr", "favg", "vfavg"]
     d2 = d1 if d2 is None else d2
     dr = d1[idx]
-    dc = d2[idx]
+    dc = d2[idx] if d2 is not None else dr
     if extra_pts is not None:
         qc = extra_pts.loc[:, extra_pts.columns.isin(idx)]
         dc = pd.concat([dc, qc])
@@ -49,10 +49,13 @@ def xembed(
         ).cpu()
     if save_didx:
         th.save({"dr": dr, "dc": dc}, os.path.join(loc, "didx_%s.p" % fn))
-    n, m = len(d1), len(d2)  # number of models
+    n, m = len(dr), len(dc)  # number of models
 
     x = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(n)])).cpu()
-    y = th.Tensor(np.stack([d2.iloc[i][key][ss] for i in range(m)])).cpu()
+    if d2 is None:
+        y = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(m)])).cpu()
+    else:
+        y = th.Tensor(np.stack([d2.iloc[i][key][ss] for i in range(m)])).cpu()
 
     if (not os.path.isfile(os.path.join(loc, "w_%s.p" % fn))) or force:
         if "kl" in distf:

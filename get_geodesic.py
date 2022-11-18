@@ -8,7 +8,7 @@ from reparameterization import *
 from embed import lazy_embed
 
 
-def main(loc="results/models/loaded", n=100):
+def main(loc="results/models/loaded", name='', n=100, ts=None):
     data = get_data()
     labels = {}
     qs = {}
@@ -22,13 +22,16 @@ def main(loc="results/models/loaded", n=100):
         ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
         labels[k] = y_
 
-    ts = np.linspace(0, 1, n+1)[1:]
+    if ts is None:
+        ts = np.linspace(0, 1, n+1)[1:]
+    else:
+        n = len(ts)
     geodesic = [
         dict(
             seed=0,
             bseed=-1,
-            m="geodesic",
-            opt="geodesic",
+            m=f"{name}geodesic",
+            opt=f"{name}geodesic",
             t=1,
             err=0.0,
             favg=0.0,
@@ -91,35 +94,21 @@ def main(loc="results/models/loaded", n=100):
 
 def get_projection():
     key = "yh"
-    idxs = ["seed", "m", "opt", "bs", "aug", "lr", "t", "wd"]
-    didx_all = th.load(
-        f"/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_{key}_all.p"
-    )[idxs]
-    for i in range(0, 2300, 100):
-        didx_all = pd.concat(
-            [didx_all, th.load(f"inpca_results/didx_{key}_geod_c{i}.p")["dc"][idxs]]
-        )
-    didx_all = didx_all.reset_index(drop=True)
-    pairs = (
-        didx_all[didx_all.duplicated(keep=False)]
-        .groupby(list(didx_all))
-        .apply(lambda x: tuple(x.index))
-        .tolist()
-    )
-    ii = [i[0] for i in sorted(pairs, key=lambda x: x[1])]
-
-    w_yh = th.load(f"/home/ubuntu/ext_vol/inpca/inpca_results_all/w_{key}_geod.p")
-    dp = w_yh[:, ii]
-    th.save(dp, f"/home/ubuntu/ext_vol/inpca/inpca_results_all/w_{key}_geod.p")
+    f = h5py.File(f"/home/ubuntu/ext_vol/inpca/inpca_results_all/w_{key}_all_geod.h5", 'r')
+    dp = f['w'][-100:, :-100]
+    f.close()
 
     r = th.load(f"/home/ubuntu/ext_vol/inpca/inpca_results_all/r_{key}_all.p")
     d_mean = r["w_mean"]
 
     xp = lazy_embed(d_mean=d_mean, dp=dp, evals=r["e"], evecs=r["v"], ne=3)
-    r["geod_extra"] = xp
+    r["extra_points"] = xp
     th.save(r, f"/home/ubuntu/ext_vol/inpca/inpca_results_all/r_{key}_all.p")
 
 
 if __name__ == "__main__":
-    main('results/models/reindexed_new', 100)
+    t1 = np.linspace(0, 0.9, 100)
+    t2 = np.linspace(0.9, 1, 100)[1:]
+    ts = np.hstack([t1, t2])
+    main(loc='results/models/loaded', name='extended_', ts=ts)
     # get_projection()

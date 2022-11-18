@@ -11,6 +11,8 @@ import torchvision.transforms as transforms
 import numpy as np
 import torch.autograd as autograd
 import torch.backends.cudnn as cudnn
+from torch.utils.data.dataset import Dataset
+import os
 
 from runner import fit
 import networks
@@ -74,69 +76,104 @@ def get_init(init_args, model, dev='cuda', data=None):
         return model
 
 
-def get_data(data_args={'data':'CIFAR10', 'aug':'none', 'sub_sample':0}, resize=1):
-    name, aug, sub_sample = data_args['data'], data_args['aug'], data_args['sub_sample']
-    assert name in ['CIFAR10', 'CIFAR100', 'MNIST']
-    assert aug in ['none', 'simple', 'full']
-    if aug == 'full':
-        aug_args = data_args['aug_args']
+def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resize=1):
+    name = data_args['data']
+    assert name in ['CIFAR10', 'CIFAR100', 'MNIST', 'synthetic']
 
-    f = getattr(thv.datasets, name)
-
-    if name in ['CIFAR10', 'CIFAR100']:
-        sz = 32//resize
-        cifar10_mean = (0.4914, 0.4822, 0.4465)
-        cifar10_std = (0.2471, 0.2435, 0.2616)
-        if aug == 'simple':
-            transform_train = transforms.Compose([
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(cifar10_mean, cifar10_std)
-            ])
-        elif aug == 'full':
-            transform_train = transforms.Compose([
-                transforms.RandomResizedCrop(32, scale=(
-                    aug_args['scale'], 1.0), ratio=(1.0, 1.0)),
-                transforms.RandomHorizontalFlip(p=0.5),
-                # transforms.RandAugment(num_ops=aug_args['ra_n'], magnitude=aug_args['ra_m']),
-                transforms.ColorJitter(
-                    aug_args['jitter'], aug_args['jitter'], aug_args['jitter']),
-                transforms.ToTensor(),
-                transforms.Normalize(cifar10_mean, cifar10_std),
-                transforms.RandomErasing(p=aug_args['reprob'])
-            ])
-        elif aug == 'none':
-            transform_train = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize(cifar10_mean, cifar10_std)
-            ])
-        transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(cifar10_mean, cifar10_std)
-        ])
-    elif name == 'STL10':
-        sz = 96//resize
-    elif name == 'MNIST':
-        sz = 28//resize
+    if name == 'synthetic':
+        c = data_args['c']
+        label_model = data_args['label_model']
+        fn = os.path.join('/home/ubuntu/ext_vol/data/synthetic/', f'{label_model}-{c}.pt')
+        if os.path.exists(fn):
+            ds = th.load(fn)
+        else:
+            seed = 5
+            setup(seed)
+            num_train = data_args['num_train']
+            num_val = data_args['num_val']
+            d = np.prod(data_args['dshape'])
+            b = 50*c
+            data_train = (th.randn(num_train, d)*c*th.exp(-b *
+                        th.arange(d)) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
+            data_val = (th.randn(num_val, d)*c*th.exp(-b*th.arange(d)
+                                                    ) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
+            
+            model_args = get_configs(
+                f"/home/ubuntu/ext_vol/inpca/configs/model/{label_model}.yaml")
+            m = get_model(model_args, dev='cuda')
+            targets_train = th.zeros(len(data_train))
+            targets_val = th.zeros(len(data_val))
+            for i in range(0, max(num_train, num_val), 500):
+                if i < num_train:
+                    targets_train[i:i +
+                            500] = th.argmax(m(data_train[i:i+500, :].cuda()), axis=1).cpu()
+                if i < num_val:
+                    targets_val[i:i+500] = th.argmax(m(data_val[i:i+500, :].cuda()), axis=1).cpu()
+            ds = {'train': SyntheticData(x=data_train, y=targets_train.long()),
+                'val': SyntheticData(x=data_val, y=targets_val.long())}
+            th.save(ds, fn)
     else:
-        assert False
+        aug, sub_sample = data_args['aug'], data_args['sub_sample']
+        assert aug in ['none', 'simple', 'full']
+        if aug == 'full':
+            aug_args = data_args['aug_args']
 
-    ds = {'train': f('/home/ubuntu/ext_vol/data', train=True, download=False, transform=transform_train),
-          'val': f('/home/ubuntu/ext_vol/data', train=False, download=False, transform=transform_test)}
+        f = getattr(thv.datasets, name)
 
-    # subsample the dataset, make sure it is balanced
-    if sub_sample > 0:
-        y = th.tensor(ds['train'].targets).long()
-        l = th.max(y)+1  # number of classes
-        # number of samples each class
-        ss = th.div(sub_sample, l, rounding_mode='trunc')
-        idxs = th.cat([th.where(y == i)[0][:ss] for i in range(l)])
-        ds['train'] = th.utils.data.Subset(ds['train'], idxs)
-        if name == "MNIST":
-            yv = th.tensor(ds['test'].targets).long()
-            idxs = th.cat([th.where(yv == i)[0][:850] for i in range(l)])
-            ds['test'] = th.utils.data.Subset(ds['test'], idxs)
+        if name in ['CIFAR10', 'CIFAR100']:
+            sz = 32//resize
+            cifar10_mean = (0.4914, 0.4822, 0.4465)
+            cifar10_std = (0.2471, 0.2435, 0.2616)
+            if aug == 'simple':
+                transform_train = transforms.Compose([
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(cifar10_mean, cifar10_std)
+                ])
+            elif aug == 'full':
+                transform_train = transforms.Compose([
+                    transforms.RandomResizedCrop(32, scale=(
+                        aug_args['scale'], 1.0), ratio=(1.0, 1.0)),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    # transforms.RandAugment(num_ops=aug_args['ra_n'], magnitude=aug_args['ra_m']),
+                    transforms.ColorJitter(
+                        aug_args['jitter'], aug_args['jitter'], aug_args['jitter']),
+                    transforms.ToTensor(),
+                    transforms.Normalize(cifar10_mean, cifar10_std),
+                    transforms.RandomErasing(p=aug_args['reprob'])
+                ])
+            elif aug == 'none':
+                transform_train = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize(cifar10_mean, cifar10_std)
+                ])
+            transform_test = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(cifar10_mean, cifar10_std)
+            ])
+        elif name == 'STL10':
+            sz = 96//resize
+        elif name == 'MNIST':
+            sz = 28//resize
+        else:
+            assert False
+
+        ds = {'train': f('/home/ubuntu/ext_vol/data', train=True, download=False, transform=transform_train),
+            'val': f('/home/ubuntu/ext_vol/data', train=False, download=False, transform=transform_test)}
+
+        # subsample the dataset, make sure it is balanced
+        if sub_sample > 0:
+            y = th.tensor(ds['train'].targets).long()
+            l = th.max(y)+1  # number of classes
+            # number of samples each class
+            ss = th.div(sub_sample, l, rounding_mode='trunc')
+            idxs = th.cat([th.where(y == i)[0][:ss] for i in range(l)])
+            ds['train'] = th.utils.data.Subset(ds['train'], idxs)
+            if name == "MNIST":
+                yv = th.tensor(ds['test'].targets).long()
+                idxs = th.cat([th.where(yv == i)[0][:850] for i in range(l)])
+                ds['test'] = th.utils.data.Subset(ds['test'], idxs)
     return ds
 
 
@@ -242,3 +279,16 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.last_epoch = math.floor(epoch)
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
+
+
+
+class SyntheticData(Dataset):
+    def __init__(self, x, y): 
+        self.x = x
+        self.y = y
+
+    def __getitem__(self, index):
+        return (self.x[index], self.y[index])
+
+    def __len__(self):
+        return len(self.y)

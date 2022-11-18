@@ -10,7 +10,7 @@ import os
 import json
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
-root = os.path.join('results', 'models', 'debug')
+root = os.path.join('results', 'models', 'synthetic-sloppy')
 
 
 def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2), fname=''):

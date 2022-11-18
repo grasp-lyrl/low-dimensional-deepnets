@@ -3,13 +3,13 @@ import numpy as np
 import torch as th
 import time
 
-fn = "yh_all"
+fn = "yh_all_geod"
+save_fn = "yh_all_geod"
 
 print("loading w")
 start_t = time.time()
 f = h5py.File(f"/home/ubuntu/ext_vol/inpca/inpca_results_all/w_{fn}.h5", "r")
 w = f["w"][:]
-assert np.allclose(w, w.T)
 print("w loaded, t: ", time.time() - start_t)
 start_t = time.time()
 
@@ -28,7 +28,7 @@ ne = 50
 es, vs = sp.eigsh(w, ne, which='LM', return_eigenvectors=True)
 
 r = dict(es=es, vs=vs, tr=np.trace(w), w_mean=dmean)
-th.save(r, f"/home/ubuntu/ext_vol/inpca/inpca_results_all/r_{fn}.p")
+th.save(r, f"/home/ubuntu/ext_vol/inpca/inpca_results_all/r_{save_fn}.p")
 print("t: ", time.time()-start_t)
 
 print("projecting")
@@ -40,6 +40,6 @@ e, v = e[ii], v[:, ii]
 
 xp = v*np.sqrt(np.abs(e))
 r.update(dict(xp=xp, e=e, v=v, diag=np.diag(w), fn=np.linalg.norm(w, 'fro')))
-th.save(r, f"/home/ubuntu/ext_vol/inpca/inpca_results_all/r_{fn}.p")
+th.save(r, f"/home/ubuntu/ext_vol/inpca/inpca_results_all/r_{save_fn}.p")
 print("projected, t: ", time.time() - start_t)
 start_t = time.time()

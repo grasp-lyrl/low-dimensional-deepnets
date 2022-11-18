@@ -5,6 +5,7 @@ import torch as th
 import numpy as np
 import math
 from collections import defaultdict
+import tqdm
 
 
 ts = defaultdict(list)
@@ -57,11 +58,11 @@ def load_d(
     return_nan=False,
     loaded=False,
 ):
-    r = [] if not loaded else None
+    r = [] 
     nan_models = []
     count = 0
     nmodels = math.inf if nmodels < 0 else nmodels
-    for f in file_list:
+    for f in tqdm.tqdm(file_list):
         configs = json.loads(f[f.find("{") : f.find("}") + 1])
         d_ = th.load(f)
         if verbose:
@@ -69,7 +70,7 @@ def load_d(
         if loaded:
             for c in configs:
                 d_ = d_.assign(**{c: configs[c]})
-            r = pd.concat([r, d_])
+            r.append(d_)
         else:
             d = d_["data"]
             if any(np.isnan(d[-1]["f"])):
@@ -92,7 +93,7 @@ def load_d(
     if verbose:
         print(len(r))
     if len(r) > 0:
-        d = pd.DataFrame(r)
+        d = pd.concat(r) if loaded else pd.DataFrame(r)
         if avg_err:
             d["err"] = d.apply(lambda r: r.e.mean().item(), axis=1)
             d["verr"] = d.apply(lambda r: r.ev.mean().item(), axis=1)
