@@ -10,7 +10,6 @@ import os
 import json
 
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
-root = os.path.join('results', 'models', 'synthetic-sloppy')
 
 
 def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2), fname=''):
@@ -114,10 +113,14 @@ def main():
     parser.add_argument('--init-config', '-i', type=str,
                         default='./configs/init/normal.yaml',
                         help='start from corner')
+    parser.add_argument('--save-dir', '-s', type=str, 
+                        default='results/models/all',
+                        help='directory to save results')
 
     args = parser.parse_args()
     seed = args.seed
 
+    root = args.save_dir
     data_args = get_configs(args.data_config)
     model_args = get_configs(args.model_config)
     optim_args = get_configs(args.optim_config)

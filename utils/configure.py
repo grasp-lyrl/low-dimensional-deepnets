@@ -85,6 +85,7 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
         label_model = data_args['label_model']
         fn = os.path.join('/home/ubuntu/ext_vol/data/synthetic/', f'{label_model}-{c}.pt')
         if os.path.exists(fn):
+            print("loading from ", fn)
             ds = th.load(fn)
         else:
             seed = 5
@@ -93,14 +94,22 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
             num_val = data_args['num_val']
             d = np.prod(data_args['dshape'])
             b = 50*c
-            data_train = (th.randn(num_train, d)*c*th.exp(-b *
-                        th.arange(d)) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
-            data_val = (th.randn(num_val, d)*c*th.exp(-b*th.arange(d)
-                                                    ) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
+            evals = b*th.exp(-c*th.arange(d))
+            data_train = (th.randn(num_train, d) @ th.diag(th.sqrt(evals / d))).reshape(-1, *data_args['dshape'])
+            data_val= (th.randn(num_val, d) @ th.diag(th.sqrt(evals / d))).reshape(-1, *data_args['dshape'])
+            # data_train = (th.randn(num_train, d)*b*th.exp(-c *
+            #             th.arange(d)) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
+            # data_val = (th.randn(num_val, d)*b*th.exp(-c*th.arange(d)
+            #                                         ) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
             
             model_args = get_configs(
                 f"/home/ubuntu/ext_vol/inpca/configs/model/{label_model}.yaml")
             m = get_model(model_args, dev='cuda')
+            def init_weights(m):
+                if isinstance(m, th.nn.Linear):
+                    th.nn.init.kaiming_normal_(
+                        m.weight, mode='fan_in', nonlinearity='relu')
+            m.apply(init_weights)
             targets_train = th.zeros(len(data_train))
             targets_val = th.zeros(len(data_val))
             for i in range(0, max(num_train, num_val), 500):

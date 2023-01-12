@@ -9,12 +9,12 @@ import tqdm
 
 
 ts = defaultdict(list)
-for bs in [200, 500, 1000]:
+for bs in [50, 100, 200, 500, 1000]:
     for epochs in [200, 300]:
         key = (bs, epochs)
         t = 0
         ts[key].append(t)
-        n_batches = 50000 // bs
+        n_batches = 5000 // bs
         for epoch in range(epochs):
             for i in range(n_batches):
                 t += 1
@@ -59,6 +59,7 @@ def load_d(
     loaded=False,
 ):
     r = [] 
+    loaded_r = []
     nan_models = []
     count = 0
     nmodels = math.inf if nmodels < 0 else nmodels
@@ -67,10 +68,10 @@ def load_d(
         d_ = th.load(f)
         if verbose:
             print(f)
-        if loaded:
+        if loaded or isinstance(d_, pd.DataFrame):
             for c in configs:
                 d_ = d_.assign(**{c: configs[c]})
-            r.append(d_)
+            loaded_r.append(d_)
         else:
             d = d_["data"]
             if any(np.isnan(d[-1]["f"])):
@@ -86,25 +87,27 @@ def load_d(
                     t_ = i
                 t.update({"t": t_})
                 t.update(d[i])
+                for k in keys:
+                    if not isinstance(t[k], np.ndarray):
+                        t[k] = t[k].numpy()
+                    if (t[k] < 0).any():
+                        t[k] = np.exp(t[k])
                 r.append(t)
             count += 1
             if count > nmodels:
                 break
     if verbose:
-        print(len(r))
-    if len(r) > 0:
-        d = pd.concat(r) if loaded else pd.DataFrame(r)
+        print(len(r), len(loaded_r))
+    if len(r) > 0 or len(loaded_r) > 0:
+        d = pd.DataFrame(r)
+        if len(loaded_r) > 0:
+            loaded_r = pd.concat(loaded_r)
+            d = pd.concat([d, loaded_r])
         if avg_err:
             d["err"] = d.apply(lambda r: r.e.mean().item(), axis=1)
             d["verr"] = d.apply(lambda r: r.ev.mean().item(), axis=1)
             d["favg"] = d.apply(lambda r: r.f.mean().item(), axis=1)
             d["vfavg"] = d.apply(lambda r: r.fv.mean().item(), axis=1)
-
-        for k in keys:
-            if numpy:
-                d[k] = d.apply(lambda r: r[k].numpy(), axis=1)
-            if (d[k].iloc[0] < 0).any():
-                d[k] = d.apply(lambda r: np.exp(r[k]), axis=1)
 
         if drop:
             d = drop_untrained(d, key="err", th=drop, verbose=True).reset_index()

@@ -12,6 +12,7 @@ f = h5py.File(f"/home/ubuntu/ext_vol/inpca/inpca_results_all/w_{fn}.h5", "r")
 w = f["w"][:]
 print("w loaded, t: ", time.time() - start_t)
 start_t = time.time()
+print(w.shape)
 
 print("centering")
 n = w.shape[0]

@@ -1,0 +1,9 @@
+---
+m: "fcnn"
+model_args:
+  dims: [200, 512, 512, 5]
+  bn: True
+  bias: True
+  dropout_rate: 0.0
+  activation: 'ReLU'
+  out_bias: True

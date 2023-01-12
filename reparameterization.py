@@ -124,9 +124,7 @@ def reparam(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh'):
                 ##################### old #########################
 
 
-def compute_lambda():
-    loc = 'results/models/all'
-    force = False 
+def compute_lambda(reparam=False, force=False, loc='results/models/all'):
     all_files = glob.glob(os.path.join(loc, '*}.p'))
     file_list = []
     for f in all_files:
@@ -147,6 +145,9 @@ def compute_lambda():
         ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
         labels[k] = y_
 
+    didx_all = None
+    cols = ['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd', 't', 'err', 'verr', 'favg',
+            'vfavg', 'lam_yh', 'lam_yvh']
     for f in tqdm.tqdm(file_list):
         load_fn = os.path.join('results/models/loaded', os.path.basename(f))
         save_fn = os.path.join('results/models/reindexed_new', os.path.basename(f))
@@ -162,21 +163,30 @@ def compute_lambda():
                 continue
         if d is not None:
             for key in ['yh', 'yvh']:
-                if f'lam_{key}' in d.columns:
-                    continue
-                yhs = np.sqrt(np.exp(np.stack(d[key].values)))
+                yhs = np.stack(d[key].values)
+                if not np.allclose(yhs.sum(-1), 1):
+                    yhs = np.exp(yhs)
+                    probs = False
+                else:
+                    probs = True
+                yhs = np.sqrt(yhs)
                 qs_ = np.repeat(qs[key], yhs.shape[0], axis=0)
                 ps_ = np.repeat(ps[key], yhs.shape[0], axis=0)
                 d[f'lam_{key}'] = project(yhs, ps_, qs_)
-                th.save(d, load_fn)
+            th.save(d, load_fn)
+            didx_all = pd.concat([didx_all, d[cols]])
+            th.save(
+                didx_all, '/home/ubuntu/ext_vol/inpca/results/models/loaded/didx_all.p')
         else:
             continue
-        for key in ['yh', 'yvh']:
-            d[key] = d.apply(lambda r: np.exp(r[key]), axis=1)
-        new_d = reparam(d, labels, num_ts=100,
-                        groups=['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd'])
-        th.save(new_d, save_fn)
+        if reparam:
+            for key in ['yh', 'yvh']:
+                if not probs:
+                    d[key] = d.apply(lambda r: np.exp(r[key]), axis=1)
+            new_d = reparam(d, labels, num_ts=100,
+                            groups=['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd'])
+            th.save(new_d, save_fn)
 
 
 if __name__ == '__main__':
-    compute_lambda()
+    compute_lambda(reparam=False, force=True)

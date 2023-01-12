@@ -51,11 +51,11 @@ def xembed(
         th.save({"dr": dr, "dc": dc}, os.path.join(loc, "didx_%s.p" % fn))
     n, m = len(dr), len(dc)  # number of models
 
-    x = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(n)])).cpu()
+    x = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(n)]).squeeze()).cpu()
     if d2 is None:
-        y = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(m)])).cpu()
+        y = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(m)]).squeeze()).cpu()
     else:
-        y = th.Tensor(np.stack([d2.iloc[i][key][ss] for i in range(m)])).cpu()
+        y = th.Tensor(np.stack([d2.iloc[i][key][ss] for i in range(m)]).squeeze()).cpu()
 
     if (not os.path.isfile(os.path.join(loc, "w_%s.p" % fn))) or force:
         if "kl" in distf:

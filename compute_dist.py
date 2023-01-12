@@ -43,20 +43,23 @@ def get_idxs(s, file_list, idx=None):
 def process_pair(pair, file_list, loc="inpca_results", keys=["yh"], save_didx=False):
     print(pair)
     s1, s2 = pair
-    dist_from_flist(file_list[s1], file_list[s2], keys, loc, f"{s1}_{s2}", save_didx)
+    dist_from_flist(f1=file_list[s1], f2=file_list[s2], keys=keys, 
+                    loc=loc, fn=f"{s1}_{s2}", save_didx=save_didx)
 
 
-def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="", loaded=False, save_didx=False):
+def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
+                    ss=slice(0, -1, 2),
+                    avg_err=False, loaded=False, save_didx=False):
     d1 = load_d(
         file_list=f1,
-        avg_err=True,
+        avg_err=avg_err,
         numpy=loaded,
         loaded=loaded,
     )
     if f2 is not None:
         d2 = load_d(
             file_list=f2,
-            avg_err=True,
+            avg_err=avg_err,
             numpy=loaded,
             loaded=loaded,
         )
@@ -68,7 +71,7 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="", loaded=False
             d1,
             d2,
             fn=f"{key}_{fn}",
-            ss=slice(0, -1, 2),
+            ss=ss,
             probs=True,
             key=key,
             loc=loc,
@@ -117,19 +120,13 @@ def compute_distance(
     #         partial(process_pair, file_list=file_list, loc=save_loc, save_didx=save_didx), load_list, chunksize=1)
 
 
-def join():
-    loc = "inpca_results"
-    key = "yvh"
-    seeds = range(42, 52)
-    m = CHOICES["m"]
-    rlist = None
-    save_loc = "inpca_results_all"
+def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_results_avg_new", fn="all"):
 
-    didxs_f = os.path.join(save_loc, f"didx_{key}_all.p")
-    didxs = th.load(didxs_f)
-    indices = didxs.groupby(["seed", "m"]).indices
+    didxs_f = os.path.join(save_loc, f"didx_{key}_{fn}.p")
+    didxs = th.load(didxs_f)['dr'].reset_index(drop=True)
+    indices = didxs.groupby(groupby).indices
 
-    fname = os.path.join(save_loc, f"w_{key}_all.h5")
+    fname = os.path.join(save_loc, f"w_{key}_{fn}.h5")
     if os.path.exists(fname):
         f = h5py.File(fname, "r+")
         dset = f["w"]
@@ -143,26 +140,31 @@ def join():
     groups = list(indices.keys())
     for i in range(len(groups)):
         r = groups[i]
+        ridxs = indices[r]
+        if not isinstance(r, tuple):
+            r = (r,)
         w_fname = os.path.join(loc, f"w_{key}_{r}_{r}.p")
         w_ = th.load(w_fname)
-        ridxs = indices[r]
 
         def is_cts(l):
             return all((np.array(l[1:]) - np.array(l[:-1])) == 1)
+        import ipdb;ipdb.set_trace()
 
         assert is_cts(ridxs)  # debug
         rstart, rend = ridxs[0], ridxs[-1] + 1
         dset[rstart:rend, rstart:rend] = w_
 
-        cset = rlist or [groups[j] for j in range(i + 1, len(groups))]
+        cset = [groups[j] for j in range(i + 1, len(groups))]
         for c in cset:
             print(r, c)
+            cidxs = indices[c]
+            if not isinstance(c, tuple):
+                c = (c,)
             fname = os.path.join(loc, f"w_{key}_{r}_{c}.p")
             if os.path.exists(fname):
                 w_ = th.load(fname)
             else:
                 continue
-            cidxs = indices[c]
             assert is_cts(cidxs)
             cstart, cend = cidxs[0], cidxs[-1] + 1
             dset[rstart:rend, cstart:cend] = w_
@@ -228,7 +230,6 @@ def compute_path_distance(
     key="yh",
     fn="pointwise",
     T=100,
-    force=False,
 ):
     if all_files is None:
         all_files = glob.glob(os.path.join(loc, "*}.p"))
@@ -244,7 +245,7 @@ def compute_path_distance(
     else:
         didx = None
         dists = np.zeros([T, len(all_files), len(all_files)])
-        chunks = np.array_split(np.arange(len(all_files)), 10)
+        chunks = np.array_split(np.arange(len(all_files)), 30)
     print(len(all_files))
 
     with tqdm.tqdm(total=len(chunks) ** 2 // 2) as pbar:
@@ -258,7 +259,10 @@ def compute_path_distance(
                 numpy=False,
                 return_nan=False,
                 loaded=True,
-            ).reset_index(drop=True)
+            )
+            if d1 is None:
+                import ipdb; ipdb.set_trace()
+            d1 = d1.reset_index(drop=True)
             d1 = d1.rename(columns={"train_err": "err", "val_err": "verr"})
             d1['t'] = d1['t'].round(2)
             t1 = d1.groupby(["t"]).indices
@@ -292,7 +296,7 @@ def compute_path_distance(
                         dists[ti, i1[0] : i1[-1] + 1, i2[0] : i2[-1] + 1], 0
                     )
                     dists[ti, i1[0] : i1[-1] + 1, i2[0] : i2[-1] + 1] = dbhat(
-                        th.Tensor(x1), th.Tensor(x2), reduction="mean", chunks=50
+                        th.Tensor(x1), th.Tensor(x2), reduction="mean", chunks=50, 
                     )
                 if j > i:
                     assert np.allclose(
@@ -310,22 +314,37 @@ def compute_path_distance(
 
 
 if __name__ == "__main__":
-    # compute_distance(loc='results/models/reindexed_new', groupby=['seed', 'm'], save_loc='inpca_results_avg_new')
+
+    #################
+    # get all files #
+    #################
+    all_files = []
+    for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")):
+        configs = json.loads(f[f.find("{"): f.find("}") + 1])
+        if configs['seed'] >= 0 and configs['aug'] == 'none' and configs['opt'] == 'sgd' and configs['bs'] <1000:
+            all_files.append(f)
+    all_files = np.array(all_files)
+    print(len(all_files))
+
+    # Compute pairwise dist
+    compute_distance(
+        all_files=all_files,
+        load_list=None,
+        loc="results/models/reindexed_new",
+        groupby=["m"],
+        save_didx=True,
+        save_loc="inpca_results_avg_new",
+    )
+
+    # Join
+    join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_results_avg_new", fn="all")
 
     ################################
     # compute distance to geodesic #
     ################################
-    fn = ''
-    all_file = glob.glob('results/models/loaded/*}.p')
-    flist = []
-    for f in all_file:
-        if 'geodesic' in f or '52' in f:
-            print(f)
-            continue
-        flist.append(f)
-    geod = '/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na"}.p'
+    # geod = '/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na"}.p'
 
-    dist_from_flist([geod], [geod], loc='inpca_results', fn=f'{fn}geod_geod', save_didx=True)
+    # dist_from_flist([geod], [geod], loc='inpca_results', fn=f'{fn}geod_geod', save_didx=True)
     # for i in range(0, len(flist), 100):
     #     dist_from_flist([geod], flist[i:i+100], loc='inpca_results', fn=f'{fn}geod_c{i}', save_didx=True)
 
@@ -339,6 +358,7 @@ if __name__ == "__main__":
     # dgeod = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/didx_{key}_{fn}geod_c0.p')['dr']
     # dall = pd.concat([dall, dgeod], ignore_index=True)
     # dall = dall.reset_index(drop=False)
+    # th.save(dall, f'/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all.p')
 
     # d = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/didx_{key}_{fn}geod_c0.p')['dc']
     # w = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results/w_{key}_{fn}geod_c0.p')
@@ -374,12 +394,6 @@ if __name__ == "__main__":
     ################################################
     # compute pairwise distance for particle & avg #
     ################################################
-    # file_list = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/reindexed_new/*}.p')
-    # all_files = []
-    # for f in file_list:
-    #     c = json.loads(f[f.find('{'):f.find('}')+1])
-    #     if c['seed'] <= 0:
-    #         all_files.append(f)
     # ms = ['wr-10-4-8', 'convmixer', 'allcnn', 'wr-16-4-64']
     # load_list = [((0, 'geodesic'), (0, 'geodesic'))]
     # print(load_list)
@@ -389,13 +403,12 @@ if __name__ == "__main__":
     ##################################################
     # compute 3d distance tensor, including geodesic #
     ##################################################
-    # all_files = glob.glob(os.path.join("results/models/reindexed_new", "*}.p"))
-    # all_files = np.array(all_files)
 
     # compute_path_distance(
     #     all_files=all_files,
     #     loc="results/models/reindexed_new",
     #     save_loc="inpca_results_avg_new",
-    #     load=True,
+    #     load=False,
+    #     key="yh",
     #     fn="3d_geod",
     # )

@@ -2,7 +2,7 @@ from networks.net_utils import *
 
 
 class fcnn(nn.Module):
-    def __init__(self, dims, bn=False, bias=True, dropout_rate=0.0):
+    def __init__(self, dims, bn=False, bias=True, activation='ReLU', out_nonlinear='', out_bias=True, dropout_rate=0.0):
         super(fcnn, self).__init__()
 
         self.dims = dims
@@ -12,11 +12,13 @@ class fcnn(nn.Module):
 
         for i in range(len(dims)-2):
             self.layers.append(nn.Linear(dims[i], dims[i+1], bias=bias))
-            self.layers.append(nn.ReLU())
+            self.layers.append(getattr(nn, activation)())
             if bn:
                 self.layers.append(nn.BatchNorm1d(dims[i+1], affine=False))
             self.layers.append(nn.Dropout(dropout_rate))
-        self.layers.append(nn.Linear(dims[-2], dims[-1]))
+        self.layers.append(nn.Linear(dims[-2], dims[-1], bias=out_bias))
+        if out_nonlinear:
+            self.layers.append(getattr(nn, out_nonlinear)())
         print('Num parameters: ', sum([p.numel() for p in self.parameters()]))
 
     def forward(self, x):

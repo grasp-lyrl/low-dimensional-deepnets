@@ -1,8 +1,0 @@
----
-data: "synthetic"
-aug: "na"
-c: 0.001
-num_train: 50000
-num_val: 10000
-label_model: "fc-200"
-dshape: [200]
