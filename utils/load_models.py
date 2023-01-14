@@ -103,7 +103,7 @@ def load_d(
         if len(loaded_r) > 0:
             loaded_r = pd.concat(loaded_r)
             d = pd.concat([d, loaded_r])
-        if avg_err:
+        if avg_err and all(c in d.columns for c in ["e", "ev", "f", "fv"]):
             d["err"] = d.apply(lambda r: r.e.mean().item(), axis=1)
             d["verr"] = d.apply(lambda r: r.ev.mean().item(), axis=1)
             d["favg"] = d.apply(lambda r: r.f.mean().item(), axis=1)

@@ -17,34 +17,16 @@ from embed import xembed, proj_, lazy_embed
 from utils import load_d, get_idx, CHOICES, dbhat
 
 
-def get_idxs(s, file_list, idx=None):
-    print(s)
-    idx = idx or [
-        "seed",
-        "m",
-        "opt",
-        "t",
-        "err",
-        "favg",
-        "verr",
-        "vfavg",
-        "bs",
-        "aug",
-        "bn",
-        "lr",
-        "wd",
-    ]
-    d = load_d(file_list=file_list[s], avg_err=True, probs=False, return_nan=False)
-    didx = d[idx]
-    th.save(didx, os.path.join("inpca_results", f"didx_{s}.p"))
-    print(f"saved {s}")
-
-
-def process_pair(pair, file_list, loc="inpca_results", keys=["yh"], save_didx=False):
-    print(pair)
-    s1, s2 = pair
-    dist_from_flist(f1=file_list[s1], f2=file_list[s2], keys=keys, 
-                    loc=loc, fn=f"{s1}_{s2}", save_didx=save_didx)
+def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"]):
+    load_list_ = product(*[CHOICES[g] for g in groupby])
+    d = pd.DataFrame()
+    for c in load_list_:
+        load_fn = os.path.join(loc, f"didx_{key}_{c}_{c}.p")
+        di = th.load(load_fn)["dc"]
+        d = pd.concat([d, di])
+    save_fn = os.path.join(loc, f"didx_{fn}.p")
+    th.save(d.reset_index(drop=True), save_fn)
+    print("saved ", save_fn)
 
 
 def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
@@ -85,6 +67,13 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
         )
 
 
+def process_pair(pair, file_list, loc="inpca_results", keys=["yh"], save_didx=False):
+    print(pair)
+    s1, s2 = pair
+    dist_from_flist(f1=file_list[s1], f2=file_list[s2], keys=keys, 
+                    loc=loc, fn=f"{s1}_{s2}", save_didx=save_didx)
+
+
 def compute_distance(
     all_files=None,
     load_list=None,
@@ -122,8 +111,8 @@ def compute_distance(
 
 def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_results_avg_new", fn="all"):
 
-    didxs_f = os.path.join(save_loc, f"didx_{key}_{fn}.p")
-    didxs = th.load(didxs_f)['dr'].reset_index(drop=True)
+    didxs_f = os.path.join(save_loc, f"didx_{fn}.p")
+    didxs = th.load(didxs_f).reset_index(drop=True)
     indices = didxs.groupby(groupby).indices
 
     fname = os.path.join(save_loc, f"w_{key}_{fn}.h5")
@@ -327,14 +316,17 @@ if __name__ == "__main__":
     print(len(all_files))
 
     # Compute pairwise dist
-    compute_distance(
-        all_files=all_files,
-        load_list=None,
-        loc="results/models/reindexed_new",
-        groupby=["m"],
-        save_didx=True,
-        save_loc="inpca_results_avg_new",
-    )
+    # compute_distance(
+    #     all_files=all_files,
+    #     load_list=None,
+    #     loc="results/models/reindexed_new",
+    #     groupby=["m"],
+    #     save_didx=True,
+    #     save_loc="inpca_results_avg_new",
+    # )
+
+    # get didxs
+    join_didx(loc="inpca_results_avg_new", key="yh", fn="all", groupby=["m"])
 
     # Join
     join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_results_avg_new", fn="all")

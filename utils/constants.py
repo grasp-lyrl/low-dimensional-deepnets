@@ -1,4 +1,5 @@
 CHOICES = {
+    'seed': range(42, 52),
     'm': ["allcnn", "convmixer", "fc",
           "vit", "wr-10-4-8", "wr-16-4-64"],
     'opt': ["adam", "sgd", "sgdn"],
