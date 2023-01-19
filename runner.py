@@ -121,6 +121,7 @@ def main():
     seed = args.seed
 
     root = args.save_dir
+    os.makedirs(root, exist_ok=True)
     data_args = get_configs(args.data_config)
     model_args = get_configs(args.model_config)
     optim_args = get_configs(args.optim_config)
@@ -135,8 +136,7 @@ def main():
              bseed=args.batch_seed,
              aug=args.aug,
              m=os.path.basename(args.model_config)[:-5],
-             bn=args.model_args['bn'],
-             drop=args.model_args['dropout_rate'],
+             init=init_args['init_fn'],
              opt=os.path.basename(args.optim_config).split('-')[0],
              bs=args.bs,
              lr=args.opt_args['lr'],

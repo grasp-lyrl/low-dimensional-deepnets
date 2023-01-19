@@ -22,8 +22,9 @@ def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"]):
     d = pd.DataFrame()
     for c in load_list_:
         load_fn = os.path.join(loc, f"didx_{key}_{c}_{c}.p")
-        di = th.load(load_fn)["dc"]
-        d = pd.concat([d, di])
+        if os.path.exists(load_fn):
+            di = th.load(load_fn)["dc"]
+            d = pd.concat([d, di])
     save_fn = os.path.join(loc, f"didx_{fn}.p")
     th.save(d.reset_index(drop=True), save_fn)
     print("saved ", save_fn)
@@ -31,6 +32,7 @@ def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"]):
 
 def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
                     ss=slice(0, -1, 2),
+                    idx=["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"],
                     avg_err=False, loaded=False, save_didx=False):
     d1 = load_d(
         file_list=f1,
@@ -48,7 +50,6 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
     else:
         d2 = None
     for key in keys:
-        idx = ["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"]
         xembed(
             d1,
             d2,
@@ -137,7 +138,6 @@ def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_r
 
         def is_cts(l):
             return all((np.array(l[1:]) - np.array(l[:-1])) == 1)
-        import ipdb;ipdb.set_trace()
 
         assert is_cts(ridxs)  # debug
         rstart, rend = ridxs[0], ridxs[-1] + 1
@@ -310,7 +310,7 @@ if __name__ == "__main__":
     all_files = []
     for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")):
         configs = json.loads(f[f.find("{"): f.find("}") + 1])
-        if configs['seed'] >= 0 and configs['aug'] == 'none' and configs['opt'] == 'sgd' and configs['bs'] <1000:
+        if 42 <= configs['seed'] <= 46 and configs['aug'] == 'none':
             all_files.append(f)
     all_files = np.array(all_files)
     print(len(all_files))
@@ -320,16 +320,16 @@ if __name__ == "__main__":
     #     all_files=all_files,
     #     load_list=None,
     #     loc="results/models/reindexed_new",
-    #     groupby=["m"],
+    #     groupby=["seed", "m"],
     #     save_didx=True,
     #     save_loc="inpca_results_avg_new",
     # )
 
     # get didxs
-    join_didx(loc="inpca_results_avg_new", key="yh", fn="all", groupby=["m"])
+    join_didx(loc="inpca_results_avg_new", key="yh", fn="all", groupby=["seed", "m"])
 
     # Join
-    join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_results_avg_new", fn="all")
+    join(loc="inpca_results_avg_new", key="yh", groupby=["seed", "m"], save_loc="inpca_results_avg_new", fn="all")
 
     ################################
     # compute distance to geodesic #

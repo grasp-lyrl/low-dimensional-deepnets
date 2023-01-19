@@ -1,0 +1,5 @@
+---
+init_fn: "kaiming"
+init_fn_args: 
+  mode: "fan_in"
+  nonlinearity: "relu"

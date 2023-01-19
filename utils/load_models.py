@@ -66,8 +66,6 @@ def load_d(
     for f in tqdm.tqdm(file_list):
         configs = json.loads(f[f.find("{") : f.find("}") + 1])
         d_ = th.load(f)
-        if verbose:
-            print(f)
         if loaded or isinstance(d_, pd.DataFrame):
             for c in configs:
                 d_ = d_.assign(**{c: configs[c]})

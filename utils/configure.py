@@ -2,6 +2,7 @@ import random
 from scipy.interpolate import interpn
 from copy import deepcopy
 from itertools import product
+from functools import partial
 import yaml
 from torch.optim.lr_scheduler import _LRScheduler
 import math
@@ -15,7 +16,7 @@ from torch.utils.data.dataset import Dataset
 import os
 
 from runner import fit
-import networks
+import networks, init
 
 
 def setup(seed):
@@ -61,18 +62,24 @@ def get_opt(optim_args, model):
 
 
 def get_init(init_args, model, dev='cuda', data=None):
-    corner = init_args['corner']
-    if corner == "normal":
-        return model
+    init_fn = init_args['init_fn']
+    if init_fn == 'corner':
+        corner = init_args['corner']
+        if corner == "normal":
+            return model
+        else:
+            opt_args = init_args['init_opts']
+            opt, sched = get_opt(opt_args, model)
+            if corner == "uniform":
+                ds_init = relabel_data(data, frac=1)
+            elif corner == "subsample":
+                ds_init = get_data(init_args['init_data'], dev=dev)
+            init_ss = fit(model, ds_init, T=opt_args['T'], bs=opt_args['bs'],
+                        autocast=opt_args['autocast'], opt=opt, sched=sched)
+            return model
     else:
-        opt_args = init_args['init_opts']
-        opt, sched = get_opt(opt_args, model)
-        if corner == "uniform":
-            ds_init = relabel_data(data, frac=1)
-        elif corner == "subsample":
-            ds_init = get_data(init_args['init_data'], dev=dev)
-        init_ss = fit(model, ds_init, T=opt_args['T'], bs=opt_args['bs'],
-                      autocast=opt_args['autocast'], opt=opt, sched=sched)
+        init_fn = getattr(init, init_fn)
+        model.apply(partial(init_fn.init_weights, **init_args['init_fn_args']))
         return model
 
 
@@ -97,19 +104,16 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
             evals = b*th.exp(-c*th.arange(d))
             data_train = (th.randn(num_train, d) @ th.diag(th.sqrt(evals / d))).reshape(-1, *data_args['dshape'])
             data_val= (th.randn(num_val, d) @ th.diag(th.sqrt(evals / d))).reshape(-1, *data_args['dshape'])
-            # data_train = (th.randn(num_train, d)*b*th.exp(-c *
-            #             th.arange(d)) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
-            # data_val = (th.randn(num_val, d)*b*th.exp(-c*th.arange(d)
-            #                                         ) / np.sqrt(d)).reshape(-1, *data_args['dshape'])
             
             model_args = get_configs(
                 f"/home/ubuntu/ext_vol/inpca/configs/model/{label_model}.yaml")
             m = get_model(model_args, dev='cuda')
-            def init_weights(m):
-                if isinstance(m, th.nn.Linear):
-                    th.nn.init.kaiming_normal_(
-                        m.weight, mode='fan_in', nonlinearity='relu')
-            m.apply(init_weights)
+            m_init = data_args.get('label_model_init', '')
+            if m_init:
+                label_model_init = get_configs(
+                    f"/home/ubuntu/ext_vol/inpca/configs/init/{m_init}.yaml"
+                )
+                m = get_init(label_model_init, m)
             targets_train = th.zeros(len(data_train))
             targets_val = th.zeros(len(data_val))
             for i in range(0, max(num_train, num_val), 500):

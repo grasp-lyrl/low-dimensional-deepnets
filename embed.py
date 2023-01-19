@@ -39,8 +39,8 @@ def xembed(
 ):
     idx = idx or ["seed", "widen", "numc", "t", "err", "verr", "favg", "vfavg"]
     d2 = d1 if d2 is None else d2
-    dr = d1[idx]
-    dc = d2[idx] if d2 is not None else dr
+    dr = d1.reindex(list(set(d1.columns).union(set(idx))), axis=1)[idx]
+    dc = d2.reindex(list(set(d1.columns).union(set(idx))), axis=1)[idx] if d2 is not None else dr
     if extra_pts is not None:
         qc = extra_pts.loc[:, extra_pts.columns.isin(idx)]
         dc = pd.concat([dc, qc])

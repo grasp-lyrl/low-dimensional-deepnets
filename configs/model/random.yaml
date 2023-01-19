@@ -1,0 +1,9 @@
+m: random
+model_args:
+  class_probs:
+  - 0.2
+  - 0.2
+  - 0.2
+  - 0.2
+  - 0.2
+  num_classes: 5

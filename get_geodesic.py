@@ -120,6 +120,8 @@ def get_projection():
 if __name__ == "__main__":
     # ts = np.linspace(0, 1, 20000)
     # main(loc='results/models/moving_y', name='', ts=ts, loaded=True, log=False)
+    data_args = get_configs('configs/data/synthetic-fc-50-0.5.yaml')
     ts = np.linspace(0.01, 1, 100)
-    main(loc='results/models/reindexed_new', name='', ts=ts, loaded=True, log=False)
+    main(loc='results/models/sloppy-50', name='', ts=ts, loaded=True, log=False,
+         data_args=data_args)
     # get_projection()

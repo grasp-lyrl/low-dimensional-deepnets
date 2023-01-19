@@ -1,2 +1,3 @@
 ---
+init_fn: "corner"
 corner: "normal"

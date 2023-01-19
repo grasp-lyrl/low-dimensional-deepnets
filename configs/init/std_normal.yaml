@@ -1,0 +1,5 @@
+---
+init_fn: "fixed_var_normal"
+init_fn_args: 
+  mean: 0.0
+  std: 1.0
