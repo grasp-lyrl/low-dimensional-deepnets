@@ -308,28 +308,32 @@ if __name__ == "__main__":
     # get all files #
     #################
     all_files = []
-    for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")):
+    for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")) + \
+            glob.glob(os.path.join("results/models/loaded", "*}.p")):
         configs = json.loads(f[f.find("{"): f.find("}") + 1])
         if 42 <= configs['seed'] <= 46 and configs['aug'] == 'none':
             all_files.append(f)
     all_files = np.array(all_files)
     print(len(all_files))
+    load_list = [((i, False), (j, True)) for i in range(42, 46) for j in range(42, 46)]
 
     # Compute pairwise dist
-    # compute_distance(
-    #     all_files=all_files,
-    #     load_list=None,
-    #     loc="results/models/reindexed_new",
-    #     groupby=["seed", "m"],
-    #     save_didx=True,
-    #     save_loc="inpca_results_avg_new",
-    # )
+    compute_distance(
+        all_files=all_files,
+        # load_list=None,
+        load_list=load_list,
+        loc="results/models/reindexed_new",
+        groupby=["seed", "interp"],
+        save_didx=True,
+        # save_loc="inpca_results_avg_new",
+        save_loc="inpca_results_mixed",
+    )
 
-    # get didxs
-    join_didx(loc="inpca_results_avg_new", key="yh", fn="all", groupby=["seed", "m"])
+    # # get didxs
+    # join_didx(loc="inpca_results_avg_new", key="yh", fn="all", groupby=["seed", "m"])
 
-    # Join
-    join(loc="inpca_results_avg_new", key="yh", groupby=["seed", "m"], save_loc="inpca_results_avg_new", fn="all")
+    # # Join
+    # join(loc="inpca_results_avg_new", key="yh", groupby=["seed", "m"], save_loc="inpca_results_avg_new", fn="all")
 
     ################################
     # compute distance to geodesic #
