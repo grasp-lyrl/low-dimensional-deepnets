@@ -25,9 +25,8 @@ def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0, cross_ter
         for aa in (th.chunk(th.arange(ns), chunks)):
             xx1 = x1[aa, :].to(dev)
             xx2 = x2[aa, :].to(dev)
-            aa = th.sqrt(aa)
             w_ = -th.log(th.bmm(th.sqrt(xx1), th.sqrt(xx2).transpose(1, 2)))
-            w_[w_ == th.inf] = 100
+            w_[w_ == th.inf] = 100  # 24547 for pytorch CE
             w_[w_ < 0] = 0
             if th.isnan(w_).sum()>0:
                 import ipdb; ipdb.set_trace()
@@ -36,6 +35,23 @@ def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0, cross_ter
             return w / ns
         else:
             return w
+
+def deuclid(x1, x2, reduction='none', dev='cuda', chunks=0):
+    # x1, x2 shape (num_points, num_samples, num_classes)
+    np1, ns, _ = x1.size()
+    np2, ns, _ = x2.size()
+    x1, x2 = x1.transpose(0, 1), x2.transpose(0, 1)
+    w = np.zeros([np1, np2])
+    chunks = chunks or 1
+    for aa in (th.chunk(th.arange(ns), chunks)):
+        xx1 = x1[aa, :].to(dev)
+        xx2 = x2[aa, :].to(dev)
+        w_ = th.cdist(xx1, xx2, p=2)
+        w += w_.sum(0).cpu().numpy()
+    if reduction == 'mean':
+        return w / ns
+    else:
+        return w
 
 
 def diskl(x1, x2, reduction='mean', probs=True, dev='cuda', chunks=0):
@@ -61,7 +77,6 @@ def diskl(x1, x2, reduction='mean', probs=True, dev='cuda', chunks=0):
         return w/ns
     else:
         return w
-
 
 
 def dinpca(x1, x2=None, sign=1, dev='cuda', sqrt=False):
