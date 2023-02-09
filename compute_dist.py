@@ -100,6 +100,7 @@ def compute_distance(
             if not os.path.exists(os.path.join(save_loc, f"w_yh_{s1}_{s2}.p")):
                 load_list.append(pair)
 
+    print(len(load_list))
     for pair in load_list:
         if len(pair[0]) == 0 or len(pair[1]) == 0:
             continue
@@ -128,36 +129,62 @@ def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_r
         )
 
     groups = list(indices.keys())
-    for i in range(len(groups)):
-        r = groups[i]
-        ridxs = indices[r]
-        if not isinstance(r, tuple):
-            r = (r,)
-        w_fname = os.path.join(loc, f"w_{key}_{r}_{r}.p")
-        w_ = th.load(w_fname)
+    pairs = list(combinations(groups, 2)) + [(r, r) for r in groups]
+    for pair in tqdm.tqdm(pairs):
+        r, c = pair
+        fname = os.path.join(loc, f"w_{key}_{r}_{c}.p")
+        if not os.path.exists(fname):
+            fname = os.path.join(loc, f"w_{key}_{c}_{r}.p")
+            c, r = pair
+
+        ridxs, cidxs = indices[r], indices[c]
+        r = (r, ) if not isinstance(r, tuple) else r
+        c = (c, ) if not isinstance(c, tuple) else r
+        try:
+            w_ = th.load(fname)
+        except:
+            print(fname)
+            continue
 
         def is_cts(l):
             return all((np.array(l[1:]) - np.array(l[:-1])) == 1)
 
-        assert is_cts(ridxs)  # debug
+        assert is_cts(ridxs) and is_cts(cidxs)  # debug
         rstart, rend = ridxs[0], ridxs[-1] + 1
-        dset[rstart:rend, rstart:rend] = w_
+        cstart, cend = cidxs[0], cidxs[-1] + 1
+        dset[rstart:rend, cstart:cend] = w_
+        dset[cstart:cend, rstart:rend] = w_.T
+    # for i in tqdm.tqdm(range(len(groups))):
+    #     r = groups[i]
+    #     ridxs = indices[r]
+    #     if not isinstance(r, tuple):
+    #         r = (r,)
+    #     w_fname = os.path.join(loc, f"w_{key}_{r}_{r}.p")
+    #     w_ = th.load(w_fname)
 
-        cset = [groups[j] for j in range(i + 1, len(groups))]
-        for c in cset:
-            print(r, c)
-            cidxs = indices[c]
-            if not isinstance(c, tuple):
-                c = (c,)
-            fname = os.path.join(loc, f"w_{key}_{r}_{c}.p")
-            if os.path.exists(fname):
-                w_ = th.load(fname)
-            else:
-                continue
-            assert is_cts(cidxs)
-            cstart, cend = cidxs[0], cidxs[-1] + 1
-            dset[rstart:rend, cstart:cend] = w_
-            dset[cstart:cend, rstart:rend] = w_.T
+    #     def is_cts(l):
+    #         return all((np.array(l[1:]) - np.array(l[:-1])) == 1)
+
+    #     assert is_cts(ridxs)  # debug
+    #     rstart, rend = ridxs[0], ridxs[-1] + 1
+    #     dset[rstart:rend, rstart:rend] = w_
+
+    #     cset = [groups[j] for j in range(i + 1, len(groups))]
+    #     for c in cset:
+    #         print(r, c)
+    #         cidxs = indices[c]
+    #         if not isinstance(c, tuple):
+    #             c = (c,)
+    #         fname = os.path.join(loc, f"w_{key}_{r}_{c}.p")
+    #         if os.path.exists(fname):
+    #             w_ = th.load(fname)
+    #         else:
+    #             print(fname)
+    #             continue
+    #         assert is_cts(cidxs)
+    #         cstart, cend = cidxs[0], cidxs[-1] + 1
+    #         dset[rstart:rend, cstart:cend] = w_
+    #         dset[cstart:cend, rstart:rend] = w_.T
     f.close()
 
 
@@ -308,27 +335,27 @@ if __name__ == "__main__":
     # get all files #
     #################
     all_files = []
-    for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")) + \
-            glob.glob(os.path.join("results/models/loaded", "*}.p")):
+    for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")):
         configs = json.loads(f[f.find("{"): f.find("}") + 1])
         if 42 <= configs['seed'] <= 46 and configs['aug'] == 'none':
             all_files.append(f)
     all_files = np.array(all_files)
-    print(len(all_files))
-    load_list = [((i, False), (j, True)) for i in range(42, 46) for j in range(42, 46)]
+    # print(len(all_files))
+    # load_list = [((i, False), (j, True)) for i in range(42, 46) for j in range(42, 46)]
 
-    # Compute pairwise dist
-    compute_distance(
-        all_files=all_files,
-        # load_list=None,
-        load_list=load_list,
-        loc="results/models/reindexed_new",
-        groupby=["seed", "interp"],
-        save_didx=True,
-        # save_loc="inpca_results_avg_new",
-        save_loc="inpca_results_mixed",
-    )
+    # # Compute pairwise dist
+    # compute_distance(
+    #     all_files=all_files,
+    #     # load_list=None,
+    #     load_list=load_list[2:],
+    #     loc="results/models/reindexed_new",
+    #     groupby=["seed", "interp"],
+    #     save_didx=True,
+    #     # save_loc="inpca_results_avg_new",
+    #     save_loc="inpca_results_mixed",
+    # )
 
+    # join(loc="inpca_results", key="yvh", groupby=["seed", "m"], save_loc="inpca_results_all", fn="all")
     # # get didxs
     # join_didx(loc="inpca_results_avg_new", key="yh", fn="all", groupby=["seed", "m"])
 
@@ -400,11 +427,11 @@ if __name__ == "__main__":
     # compute 3d distance tensor, including geodesic #
     ##################################################
 
-    # compute_path_distance(
-    #     all_files=all_files,
-    #     loc="results/models/reindexed_new",
-    #     save_loc="inpca_results_avg_new",
-    #     load=False,
-    #     key="yh",
-    #     fn="3d_geod",
-    # )
+    compute_path_distance(
+        all_files=all_files,
+        loc="results/models/reindexed_new",
+        save_loc="inpca_results_avg_new",
+        load=False,
+        key="yvh",
+        fn="3d_geod",
+    )

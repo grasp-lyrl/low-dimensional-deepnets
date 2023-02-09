@@ -65,10 +65,18 @@ def load_d(
     nmodels = math.inf if nmodels < 0 else nmodels
     for f in tqdm.tqdm(file_list):
         configs = json.loads(f[f.find("{") : f.find("}") + 1])
-        d_ = th.load(f)
+        try:
+            d_ = th.load(f)
+        except RuntimeError:
+            print(f)
+            continue
+            # import ipdb; ipdb.set_trace()
         if loaded or isinstance(d_, pd.DataFrame):
             for c in configs:
                 d_ = d_.assign(**{c: configs[c]})
+            for k in keys:
+                if (d_.iloc[0][k] < 0).any():
+                    d_[k] = d_.apply(lambda r: np.exp(r[k]), axis=1)
             loaded_r.append(d_)
         else:
             d = d_["data"]
