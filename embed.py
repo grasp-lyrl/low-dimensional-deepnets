@@ -39,6 +39,7 @@ def xembed(
 ):
     idx = idx or ["seed", "widen", "numc", "t", "err", "verr", "favg", "vfavg"]
     d2 = d1 if d2 is None else d2
+    
     dr = d1.reindex(list(set(d1.columns).union(set(idx))), axis=1)[idx]
     dc = d2.reindex(list(set(d1.columns).union(set(idx))), axis=1)[idx] if d2 is not None else dr
     if extra_pts is not None:
@@ -135,6 +136,22 @@ def proj_(w, n, ne):
     e, v = e[ii], v[:, ii]
     xp = v * np.sqrt(np.abs(e))
     return dict(xp=xp, e=e, v=v)
+
+
+def explained_distance(r):
+    ii = np.argsort(r['es'])[::-1]
+    es = r['es'][ii]
+    vs = r['vs'][:, ii]
+    b = r['diag']
+    tr = r['tr']
+
+    df = []
+    for i in range(len(es)):
+        tr = 2*(r['tr'] - es[:i].sum())**2
+        bnorm = 2*len(vs)*((b - (es[:i]*(vs[:, :i]**2)).sum(1))**2).sum()
+        Bf = 4*(r['fn']**2 - (es[:i]**2).sum())
+        df.append(tr+bnorm+Bf)
+    return np.sqrt(df/(r['fn'])**2)
 
 
 def project(

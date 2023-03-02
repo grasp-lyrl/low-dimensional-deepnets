@@ -3,15 +3,22 @@ import h5py
 import numpy as np
 import torch as th
 import time
+from utils import get_idx
 
 fn = "yh_all"
-save_fn = "yh_all"
-root = "/home/ubuntu/ext_vol/inpca/inpca_results_avg_new"
+save_fn = "yh_no_aug"
+root = "/home/ubuntu/ext_vol/inpca/inpca_results_all"
+cond = "aug=='none'" 
+
+didx = th.load("/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all.p")
+ii = get_idx(didx, cond)
+th.save(didx.iloc[ii].reset_index(drop=True), os.path.join(root, f"didx_{save_fn}.p"))
 
 print("loading w")
 start_t = time.time()
 f = h5py.File(os.path.join(root, f"w_{fn}.h5"), "r")
-w = f["w"][:]
+w = f["w"][ii, :][:, ii]
+# w = w[ii, :][:, ii]
 print("w loaded, t: ", time.time() - start_t)
 start_t = time.time()
 print(w.shape)
