@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import numpy as np
 import plotly.offline as pyo
 import pandas as pd
+import scipy.cluster.hierarchy as sch
 pyo.init_notebook_mode()
 
 
@@ -49,13 +50,18 @@ def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
             ax = fig.add_subplot(gs[d1, d2-1])
             if discrete_c:
                 sc = ax.scatter(xx[:, d2], xx[:, d1],
-                                c=c, vmin=c.min(), vmax=c.max(), s=s, lw=0.5, alpha=0.5)
+                                c=c, vmin=c.min(), vmax=c.max(), 
+                                s=s, lw=0.5, alpha=0.5,
+                                rasterized=True)
             else:
                 sc = ax.scatter(xx[:, d2], xx[:, d1],
-                                c=c, vmin=c.min(), vmax=c.max(), s=s, lw=0.5, alpha=0.5, cmap=colorscale)
+                                c=c, vmin=c.min(), vmax=c.max(), 
+                                s=s, lw=0.5, alpha=0.5, cmap=colorscale,
+                                rasterized=True)
             if len(emph) > 0:
                 for (name, ie) in emph.items():
                     sc_emph = ax.scatter(r['xp'][ie, d2], r['xp'][ie, d1], c=empcolor.get(name, 'darkred'),
+                                         rasterized=True,
                                          s=empsize.get(name, 8), lw=0.5, alpha=0.5)
             ax.set_xlim([centers[d2]-grid_size*grid_ratio[d2],
                         centers[d2]+grid_size*grid_ratio[d2]])
@@ -68,12 +74,14 @@ def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
                 ax.spines['left'].set_color('red')
 
             if d2 == d1+1:
-                ax.set_xlabel(f'pc{d2+1}')
-                ax.set_ylabel(f'pc{d1+1}')
+                ax.set_xlabel(f'PC{d2+1}')
+                ax.set_ylabel(f'PC{d1+1}')
                 ax.grid(False)
-#             else:
-            ax.set_xticks([])
-            ax.set_yticks([])
+                ax.set_xticks([0])
+                ax.set_yticks([0])
+            else:
+                ax.set_xticks([])
+                ax.set_yticks([])
 
     if legend:
         ax = fig.add_subplot(gs[-1, 0])
@@ -269,6 +277,60 @@ def plot_pairwise_dist(dists, configs,
                          xticklabels=xblock_size, yticklabels=yblock_size, annot=annot, fmt='.2g')
     return ax, didxs, rows, columns
 
+
+def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
+                    cols=['m', 'opt', 'bs', 'lr', 'wd', 'aug'], 
+                    key='yh',
+                    ):
+    idxs = didx.groupby(cols).indices
+
+    fig, ax = plt.subplots(1, 2, figsize=(10, 16))
+
+    dend = sch.dendrogram(linkage, orientation='right',
+                        no_plot=True, color_threshold=0.01)
+    label_colors = [cdict[m] for m in ylabels[dend['leaves'], color_by]]
+    dend = sch.dendrogram(linkage, orientation='right', labels=np.array(
+        ylabels[:, 0]), color_threshold=0, ax=ax[0])
+
+    # barplot of errors
+    vkey = 'verr' if key == 'yvh' else 'err'
+    err = []
+    for c in ylabels[dend['leaves'][::-1], :]:
+        m, opt = c[:2]
+        bs = int(c[2])
+        aug = c[-1]
+        lr = float(c[3])
+        wd = float(c[4])
+        err.append(didx.iloc[idxs[(m, opt, bs, lr, wd, aug)]][vkey].mean())
+
+    ylabels_combined = ['.'.join(l) for l in ylabels]
+    models = np.array(ylabels_combined)[dend['leaves'][::-1]]
+    data = pd.DataFrame(np.vstack([models, err]).T, columns=['model', 'err'])
+    data['err'] = data['err'].astype(float)
+
+    barc = [cdict[m.split('.')[color_by]] for m in models]
+    sns.barplot(x="err", y="model", data=data, ax=ax[1], palette=barc).set(
+        yticklabels=[], ylabel="")
+    ax[1].set_xlim([0, 1])
+    ax[1].invert_xaxis()
+    ax[1].yaxis.set_ticks_position('none')
+    ax[1].grid(axis='y')
+
+
+    yax = ax[0].get_yaxis()
+    r = yax.set_tick_params(pad=75)
+    for (ik, k) in enumerate([1, 2, 4, 5]):
+        secax = ax[0].secondary_yaxis('left')
+        secax.set_yticks(ax[0].get_yticks())
+        secax.set_yticklabels(ylabels[dend['leaves'], k])
+        secax.get_yaxis().set_tick_params(pad=75-(ik+1)*18, labelsize=5, length=0)
+        for (n, y) in enumerate(secax.get_ymajorticklabels()):
+            y.set_color(label_colors[n])
+
+    plt.subplots_adjust(wspace=0)
+    for x in ax[0].get_ymajorticklabels():
+        x.set_color(cdict[x.get_text().split(' ')[color_by]])
+    return fig, ax
 
 def plot_evals(r):
     fig, ax = plt.subplots(1, figsize=(6, 10))
