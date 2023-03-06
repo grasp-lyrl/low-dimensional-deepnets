@@ -10,6 +10,7 @@ import numpy as np
 import plotly.offline as pyo
 import pandas as pd
 import scipy.cluster.hierarchy as sch
+from utils import CDICT_M
 pyo.init_notebook_mode()
 
 
@@ -98,6 +99,7 @@ def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
 def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
               return_d=False, ne=3, dims=[1, 2, 3],
               size=5,
+              cdict=CDICT_M,
               cols=['seed', 'm', 'opt', 'err', 'verr',
                     'bs', 'aug', 'bn', 'lr', 'wd'],
               color='t', colorscale='RdBu', mode='markers',
@@ -118,7 +120,7 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
 
     c = dc[color]
     discrete_c = len(c.unique()) < 10
-    if discrete_c:
+    if discrete_c and cdict is None:
         colors = getattr(palettes, colorscale)[max(len(c.unique()), 3)]
         cdict = {c: colors[i] for (i, c) in enumerate(c.unique())}
         print(cdict)
@@ -279,6 +281,8 @@ def plot_pairwise_dist(dists, configs,
 
 
 def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
+                    color_threshold=0.5,
+                    above_threshold_color='C0',
                     cols=['m', 'opt', 'bs', 'lr', 'wd', 'aug'], 
                     key='yh',
                     ):
@@ -287,23 +291,19 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
     fig, ax = plt.subplots(1, 2, figsize=(10, 16))
 
     dend = sch.dendrogram(linkage, orientation='right',
-                        no_plot=True, color_threshold=0.01)
+                        no_plot=True, color_threshold=color_threshold)
     label_colors = [cdict[m] for m in ylabels[dend['leaves'], color_by]]
     dend = sch.dendrogram(linkage, orientation='right', labels=np.array(
-        ylabels[:, 0]), color_threshold=0, ax=ax[0])
+        ylabels[:, 0]), color_threshold=color_threshold, ax=ax[0],
+        above_threshold_color=above_threshold_color)
 
     # barplot of errors
     vkey = 'verr' if key == 'yvh' else 'err'
     err = []
     for c in ylabels[dend['leaves'][::-1], :]:
-        m, opt = c[:2]
-        bs = int(c[2])
-        aug = c[-1]
-        lr = float(c[3])
-        wd = float(c[4])
-        err.append(didx.iloc[idxs[(m, opt, bs, lr, wd, aug)]][vkey].mean())
+        err.append(didx.iloc[idxs[tuple(c)]][vkey].mean())
 
-    ylabels_combined = ['.'.join(l) for l in ylabels]
+    ylabels_combined = ['.'.join(l) for l in ylabels.astype(str)]
     models = np.array(ylabels_combined)[dend['leaves'][::-1]]
     data = pd.DataFrame(np.vstack([models, err]).T, columns=['model', 'err'])
     data['err'] = data['err'].astype(float)
@@ -330,7 +330,7 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
     plt.subplots_adjust(wspace=0)
     for x in ax[0].get_ymajorticklabels():
         x.set_color(cdict[x.get_text().split(' ')[color_by]])
-    return fig, ax
+    return fig, dend 
 
 def plot_evals(r):
     fig, ax = plt.subplots(1, figsize=(6, 10))
