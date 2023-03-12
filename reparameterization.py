@@ -124,12 +124,12 @@ def reparam(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh'):
                 ##################### old #########################
 
 
-def compute_lambda(reparam=False, force=False, loc='results/models/all'):
+def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', loc='results/models/all', save_loc='results/models/reindexed_new'):
     all_files = glob.glob(os.path.join(loc, '*}.p'))
     file_list = []
     for f in all_files:
         configs = json.loads(f[f.find('{'):f.find('}')+1])
-        if configs['corner'] == 'normal':
+        if configs.get('corner') == 'normal':
             file_list.append(f)
 
     data = get_data()
@@ -144,13 +144,21 @@ def compute_lambda(reparam=False, force=False, loc='results/models/all'):
         qs[k] = np.sqrt(np.expand_dims(y, axis=0))
         ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
         labels[k] = y_
+    if not separate:
+        qs = np.concatenate([qs['yh'], qs['yvh']], axis=1)
+        ps = np.concatenate([ps['yh'], ps['yvh']], axis=1)
+        labels = np.hstack([labels['yh'], labels['yvh']])
 
     didx_all = None
     cols = ['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd', 't', 'err', 'verr', 'favg',
-            'vfavg', 'lam_yh', 'lam_yvh']
+            'vfavg']
+    if separate:
+        cols = cols + ['lam_yh', 'lam_yvh']
+    else:
+        cols = cols + ['lam']
     for f in tqdm.tqdm(file_list):
         load_fn = os.path.join('results/models/loaded', os.path.basename(f))
-        save_fn = os.path.join('results/models/reindexed_new', os.path.basename(f))
+        save_fn = os.path.join(save_loc, os.path.basename(f))
         if os.path.exists(save_fn) and not force:
             continue
         if not os.path.exists(load_fn):
@@ -162,21 +170,29 @@ def compute_lambda(reparam=False, force=False, loc='results/models/all'):
                 print(load_fn)
                 continue
         if d is not None:
+            yhs = {}
             for key in ['yh', 'yvh']:
-                yhs = np.stack(d[key].values)
-                if not np.allclose(yhs.sum(-1), 1):
-                    yhs = np.exp(yhs)
+                yhs[key] = np.stack(d[key].values)
+                if not np.allclose(yhs[key].sum(-1), 1):
+                    yhs[key] = np.exp(yhs[key])
                     probs = False
                 else:
                     probs = True
-                yhs = np.sqrt(yhs)
-                qs_ = np.repeat(qs[key], yhs.shape[0], axis=0)
-                ps_ = np.repeat(ps[key], yhs.shape[0], axis=0)
-                d[f'lam_{key}'] = project(yhs, ps_, qs_)
+                yhs[key] = np.sqrt(yhs[key])
+                if separate:
+                    qs_ = np.repeat(qs[key], yhs[key].shape[0], axis=0)
+                    ps_ = np.repeat(ps[key], yhs[key].shape[0], axis=0)
+                    d[f'lam_{key}'] = project(yhs, ps_, qs_)
+            if not separate:
+                # yhs = np.stack([yhs['yh'], yhs['yvh']])
+                yhs = np.concatenate([yhs['yh'], yhs['yvh']], axis=1)
+                qs_ = np.repeat(qs, yhs.shape[0], axis=0)
+                ps_ = np.repeat(ps, yhs.shape[0], axis=0)
+                d['lam'] = project(yhs, ps_, qs_)
             th.save(d, load_fn)
             didx_all = pd.concat([didx_all, d[cols]])
             th.save(
-                didx_all, '/home/ubuntu/ext_vol/inpca/results/models/loaded/didx_all.p')
+                didx_all, f'/home/ubuntu/ext_vol/inpca/results/models/loaded/didx_{didx_fn}.p')
         else:
             continue
         if reparam:
@@ -189,4 +205,5 @@ def compute_lambda(reparam=False, force=False, loc='results/models/all'):
 
 
 if __name__ == '__main__':
-    compute_lambda(reparam=False, force=True)
+    # compute_lambda(reparam=False, force=True)
+    compute_lambda(reparam=False, force=False, separate=False, loc='results/models/all', save_loc='results/models/reindexed_all', didx_fn='nonsep')
