@@ -99,15 +99,13 @@ def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
 def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
               return_d=False, ne=3, dims=[1, 2, 3],
               size=5,
-              cdict=CDICT_M,
+            #   cdict=CDICT_M,
+              cdict=None,
               cols=['seed', 'm', 'opt', 'err', 'verr',
                     'bs', 'aug', 'bn', 'lr', 'wd'],
               color='t', colorscale='RdBu', mode='markers',
               xrange=[-1, 1], yrange=[-1, 1], zrange=[-1, 1], opacity=0.7):
 
-    for (config, idxs) in dc.groupby(['m', 'opt', 'bs', 'aug', 'lr', 'wd']).indices.items():
-        tmax = dc.iloc[idxs]['t'].max()
-        dc.loc[idxs, 't'] /= tmax
     for i in range(ne):
         dc[f"x{i+1}"] = r['xp'][:, i]
 
@@ -116,7 +114,8 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
     for col in cols:
         d_[col] = f'{col}: ' + dc[col].astype(str)
     text = d_[cols].apply("<br>".join, axis=1)
-    text = 't: ' + dc['t'].astype(str) + '<br>' + text
+    if 't' in cols:
+        text = 't: ' + dc['t'].astype(str) + '<br>' + text
 
     c = dc[color]
     discrete_c = len(c.unique()) < 10
@@ -150,7 +149,8 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                 hovertemplate='<b>%{text}</b><extra></extra>',
                 text=text,
                 mode='markers',
-                showlegend=False,
+                showlegend=True,
+                name='main',
             )
         )
     else:
@@ -168,7 +168,8 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                 hovertemplate='<b>%{text}</b><extra></extra>',
                 text=text,
                 mode='markers',
-                showlegend=False
+                showlegend=True,
+                name='main'
             )
         )
 
@@ -288,7 +289,7 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
                     ):
     idxs = didx.groupby(cols).indices
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 16))
+    fig, ax = plt.subplots(1, 2, gridspec_kw={'width_ratios':[3, 1]}, figsize=(10, 16))
 
     dend = sch.dendrogram(linkage, orientation='right',
                         no_plot=True, color_threshold=color_threshold)
@@ -318,18 +319,19 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
 
 
     yax = ax[0].get_yaxis()
-    r = yax.set_tick_params(pad=75)
-    for (ik, k) in enumerate([1, 2, 4, 5]):
+    r = yax.set_tick_params(pad=93)
+    for (ik, k) in enumerate([1, 2, 3, 4, 5]):
         secax = ax[0].secondary_yaxis('left')
         secax.set_yticks(ax[0].get_yticks())
         secax.set_yticklabels(ylabels[dend['leaves'], k])
-        secax.get_yaxis().set_tick_params(pad=75-(ik+1)*18, labelsize=5, length=0)
+        secax.get_yaxis().set_tick_params(pad=93-(ik+1)*18, labelsize=5, length=0)
         for (n, y) in enumerate(secax.get_ymajorticklabels()):
             y.set_color(label_colors[n])
 
     plt.subplots_adjust(wspace=0)
-    for x in ax[0].get_ymajorticklabels():
-        x.set_color(cdict[x.get_text().split(' ')[color_by]])
+    for (n, x) in enumerate(ax[0].get_ymajorticklabels()):
+        # x.set_color(cdict[x.get_text().split(' ')[color_by]])
+        x.set_color(label_colors[n])
     return fig, dend 
 
 def plot_evals(r):
@@ -353,3 +355,15 @@ def plot_cone(p):
     x = uGrid * np.cos(vGrid) + p[0]
     y = uGrid + p[1]
     z = uGrid * np.sin(vGrid) + p[2]
+
+
+def plot_explained_var(r, key='yh'):
+    ii = np.argsort(np.abs(r['es']))[::-1]
+    es = r['es'][ii][:50]
+    dset = 'train' if key == 'yh' else 'test'
+    df = pd.DataFrame({'eigenvalue index':np.arange(len(es)), 'explained variance':1 - np.sqrt(1-np.cumsum(es ** 2)/r['fn']**2), 
+                       'data':dset})
+    f = plt.figure(figsize=(8, 6))
+    g = sns.lineplot(data=df, x='eigenvalue index',
+                 y='explained variance', hue='data', marker="o")
+    return df, f

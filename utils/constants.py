@@ -17,4 +17,9 @@ CDICT_M = {'allcnn': '#e41a1c',
             'vit': '#984ea3',
             'wr-10-4-8': '#ff7f00',
             'wr-16-4-64': '#ffff33',
-            'geodesic': '#a65628'}
+            'geodesic': '#000000'}
+
+CDICT_OPT = {'adam': '#e41a1c',
+            'sgd': '#377eb8',
+            'sgdn': '#4daf4a',
+            'geodesic': '#000000'}
