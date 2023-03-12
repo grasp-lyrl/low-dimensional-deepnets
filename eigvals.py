@@ -6,17 +6,21 @@ import time
 from utils import get_idx
 
 fn = "yvh_all_geod"
-save_fn = "yvh_half_weighted"
+save_fn = "yvh_later_training_weighted"
 root = "/home/ubuntu/ext_vol/inpca/inpca_results_all"
-cond = "seed<=45" 
+cond = "seed <= 45"  
 
 didx = th.load("/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all.p")
 ii = get_idx(didx, cond)
 th.save(didx.iloc[ii].reset_index(drop=True), os.path.join(root, f"didx_{save_fn}.p"))
 
-weight = np.ones(len(ii))
-weight[-1] = 600
+weight = np.ones(len(didx))
+iw = get_idx(didx, "t >= 10000")
+print(len(ii))
+weight[iw] = len(ii)
+weight = weight[ii]
 weight /= weight.sum()
+print(weight.max(), weight.min())
 
 print("loading w")
 start_t = time.time()
