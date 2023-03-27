@@ -187,6 +187,16 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
                 yv = th.tensor(ds['test'].targets).long()
                 idxs = th.cat([th.where(yv == i)[0][:850] for i in range(l)])
                 ds['test'] = th.utils.data.Subset(ds['test'], idxs)
+        
+        noise_rate = data_args.get('noise_rate', 0)
+        if noise_rate > 0:
+            y = th.tensor(ds['train'].targets).long()
+            l = th.max(y)+1  # number of classes
+            ss = [math.floor(noise_rate*sum(y==i)) for i in range(l)]
+            idxs = th.cat([th.where(y == i)[0][:ss[i]] for i in range(l)])
+            y[idxs] = th.randint(0, l, [len(idxs)])
+            ds['train'].targets = y.tolist()
+
     return ds
 
 

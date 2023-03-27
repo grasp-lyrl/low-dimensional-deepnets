@@ -7,22 +7,26 @@ from matplotlib.gridspec import GridSpec
 import numpy as np
 import plotly.graph_objects as go
 import numpy as np
-import plotly.offline as pyo
 import pandas as pd
 import scipy.cluster.hierarchy as sch
 from utils import CDICT_M
-pyo.init_notebook_mode()
 
 
-def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
-            markers=["o", "x", "s", "*", "+"], evals=False,
-            grid_size=0.25, grid_ratio=[5, 3, 2], legend=False,
-            centers=[0, 0, 0], colorscale='vlag'):
+def triplot(dc, r, d=3, emph=[], ckey='', empcolor={}, empsize={},
+            cdict=None, cmin=None, cmax=None, discrete_c=False, cbins=None, colorscale='vlag',
+            grid_size=0.25, grid_ratio=[5, 3, 2], centers=[0, 0, 0],
+            wspace=0, hspace=0,
+            ax_label=False, legend=False):
 
     widths = grid_ratio[1:]
     heights = grid_ratio[:-1]
+    d = len(grid_ratio)
+    ncols, nrows = d-1, d-1
+    if legend:
+        widths.append(0.1)
+        ncols += 1
     fig = plt.figure(figsize=(8*sum(widths)/sum(heights), 8))
-    gs = GridSpec(d-1, d-1, width_ratios=widths, height_ratios=heights)
+    gs = GridSpec(nrows, ncols, width_ratios=widths, height_ratios=heights)
 
     if len(emph) > 0:
         iie = []
@@ -39,26 +43,27 @@ def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
     s = 2
 
     c = d_[ckey]
-    discrete_c = len(c.unique()) < 10
-    if discrete_c:
-        colors = getattr(palettes, colorscale)[max(len(c.unique()), 3)]
-        cdict = {c: colors[i] for (i, c) in enumerate(c.unique())}
+    if cdict is not None:
         c = c.map(cdict)
+    else:
+        if discrete_c:
+            if cbins is None:
+                cdict = {c: i for (i, c) in enumerate(c.unique())}
+                # print(cdict)
+                c = c.map(cdict)
+                cbins = len(c.unique())
+            colorscale = plt.get_cmap(colorscale, cbins)
+    cmin = cmin or c.min()
+    cmax = cmax or c.max()
 
     for d1 in range(d-1):
         for d2 in range(d1+1, d):
 
             ax = fig.add_subplot(gs[d1, d2-1])
-            if discrete_c:
-                sc = ax.scatter(xx[:, d2], xx[:, d1],
-                                c=c, vmin=c.min(), vmax=c.max(), 
-                                s=s, lw=0.5, alpha=0.5,
-                                rasterized=True)
-            else:
-                sc = ax.scatter(xx[:, d2], xx[:, d1],
-                                c=c, vmin=c.min(), vmax=c.max(), 
-                                s=s, lw=0.5, alpha=0.5, cmap=colorscale,
-                                rasterized=True)
+            sc = ax.scatter(xx[:, d2], xx[:, d1],
+                            c=c, vmin=cmin, vmax=cmax, 
+                            s=s, lw=0.5, alpha=0.5, cmap=colorscale,
+                            rasterized=True)
             if len(emph) > 0:
                 for (name, ie) in emph.items():
                     sc_emph = ax.scatter(r['xp'][ie, d2], r['xp'][ie, d1], c=empcolor.get(name, 'darkred'),
@@ -75,23 +80,31 @@ def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
                 ax.spines['left'].set_color('red')
 
             if d2 == d1+1:
-                ax.set_xlabel(f'PC{d2+1}')
-                ax.set_ylabel(f'PC{d1+1}')
+                if ax_label:
+                    ax.set_xlabel(f'PC{d2+1}')
+                    ax.set_ylabel(f'PC{d1+1}')
                 ax.grid(False)
                 ax.set_xticks([0])
-                ax.set_yticks([0])
+                if d1 == 0:
+                    ax.set_yticks([0, centers[d1] + grid_size*grid_ratio[d1]])
+                else:
+                    ax.set_yticks([0])
             else:
                 ax.set_xticks([])
                 ax.set_yticks([])
 
     if legend:
-        ax = fig.add_subplot(gs[-1, 0])
-        ax.set_visible(False)
-        clb = plt.colorbar(sc, pad=0.2, ax=ax)
+        ax = fig.add_subplot(gs[:, -1])
+        if cdict is not None:
+            ticks = list(cdict.keys())
+            boundaries = [cdict[k] for k in ticks]
+            clb = plt.colorbar(sc, cax=ax, boundaries=boundaries, ticks=boundaries)
+            clb.ax.set_yticklabels(ticks)
+        else:
+            clb = plt.colorbar(
+                sc, cax=ax)
         clb.ax.set_title(ckey)
-#         ax.legend(handles, labels, loc='lower center')
-#     plt.tight_layout()
-    plt.subplots_adjust(wspace=0., hspace=0.)
+    plt.subplots_adjust(wspace=wspace, hspace=hspace)
 
     plt.show()
     return fig, gs
@@ -99,7 +112,6 @@ def triplot(dc, r, d=3, emph=[], ckey='', skey='', empcolor={}, empsize={},
 def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
               return_d=False, ne=3, dims=[1, 2, 3],
               size=5,
-            #   cdict=CDICT_M,
               cdict=None,
               cols=['seed', 'm', 'opt', 'err', 'verr',
                     'bs', 'aug', 'bn', 'lr', 'wd'],
@@ -289,7 +301,7 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
                     ):
     idxs = didx.groupby(cols).indices
 
-    fig, ax = plt.subplots(1, 2, gridspec_kw={'width_ratios':[3, 1]}, figsize=(10, 16))
+    fig, ax = plt.subplots(1, 2, gridspec_kw={'width_ratios':[3, 1]}, figsize=(10, 24))
 
     dend = sch.dendrogram(linkage, orientation='right',
                         no_plot=True, color_threshold=color_threshold)
@@ -319,12 +331,12 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
 
 
     yax = ax[0].get_yaxis()
-    r = yax.set_tick_params(pad=93)
+    r = yax.set_tick_params(pad=103)
     for (ik, k) in enumerate([1, 2, 3, 4, 5]):
         secax = ax[0].secondary_yaxis('left')
         secax.set_yticks(ax[0].get_yticks())
         secax.set_yticklabels(ylabels[dend['leaves'], k])
-        secax.get_yaxis().set_tick_params(pad=93-(ik+1)*18, labelsize=5, length=0)
+        secax.get_yaxis().set_tick_params(pad=103-(ik+1)*20, labelsize=5, length=0)
         for (n, y) in enumerate(secax.get_ymajorticklabels()):
             y.set_color(label_colors[n])
 

@@ -63,46 +63,84 @@ def gamma(t, p, q):
     return gamma
 
 
-def reparam(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], key='yh'):
+def reparameterize(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], idx='lam', key='yh', idx_lim=(0,1)):
     new_d = []
     configs = d.groupby(groups).indices
     ts = np.linspace(0, 1, (num_ts+1))[1:]
-    for (c, idx) in configs.items():
-        di = d.iloc[idx]
-        ind = {'yh': di.index.min(), 'yvh': di.index.min()}
-        max_ind = di.index.max()
-        for t in ts:
-            data = {groups[i]: c[i] for i in range(len(c))}
-            data['t'] = t
-            for key in ['yh', 'yvh']:
-                k = ind[key]
-                while k < max_ind:
-                    if di.iloc[k][f'lam_{key}'] > t:
-                        break
-                    k += 1
-                if k == max_ind:
-                    end_lam = 1
-                else:
-                    end_lam = di.iloc[k][f'lam_{key}']
-                ind[key] = k
-                start = di.iloc[max(0, k-1)]
-                end = di.iloc[k]
+    d[idx] = np.clip(d[idx], *idx_lim)
+    d[idx] = d[idx] / (idx_lim[1] - idx_lim[0])
+    # for (c, idx) in configs.items():
+        # di = d.iloc[idx]
+    ind = d.index.min()
+    max_ind = d.index.max()
+    yhs = []
+    errs = []
+    favgs = []
+    for t in ts:
+        k = ind
+        while k < max_ind:
+            if d.iloc[k][idx] > t:
+                break
+            k += 1
+        if k == max_ind:
+            end_lam = 1
+        else:
+            end_lam = d.iloc[k][idx]
+        ind = k
+        start = d.iloc[max(0, k-1)]
+        end = d.iloc[k]
+        if abs(end_lam - start[idx]) < 1e-8:
+            yhs.append(start[key])
+            errs.append(start['err'])
+            favgs.append(start['favg'])
+            continue
 
-                if abs(end_lam - start[f'lam_{key}']) < 1e-8:
-                    import ipdb; ipdb.set_trace()
-                lam_interp = (t - start[f'lam_{key}']) / (end_lam - start[f'lam_{key}'])
-                lam_interp = np.clip(lam_interp, 0, 1)
-                r = gamma(lam_interp, np.sqrt(start[key])[None, :], np.sqrt(end[key])[None, :])
-                data[key] = (r ** 2).squeeze()
-                errkey = 'err' if key == 'yh' else 'verr'
-                fkey = 'favg' if key == 'yh' else 'vfavg'
-                data[errkey] = (
-                    np.argmax(data[key], axis=-1) != labels[key]).mean()
-                data[fkey] = - \
-                    np.log(data[key])[np.arange(
-                        len(labels[key])), labels[key]].mean()
-            new_d.append(data)
-    return pd.DataFrame(new_d)
+        lam_interp = (t - start[idx]) / (end_lam - start[idx])
+        lam_interp = np.clip(lam_interp, 0, 1)
+        r = gamma(lam_interp, np.sqrt(start[key])[None, :], np.sqrt(end[key])[None, :])
+        yhs.append((r ** 2).squeeze())
+        errs.append((
+            np.argmax(yhs[-1], axis=-1) != labels[key]).mean())
+        favgs.append(- \
+            np.log(yhs[-1])[np.arange(
+                len(labels[key])), labels[key]].mean())
+    return ts, yhs, errs, favgs
+    # for (c, idx) in configs.items():
+    #     di = d.iloc[idx]
+    #     ind = {'yh': di.index.min(), 'yvh': di.index.min()}
+    #     max_ind = di.index.max()
+    #     for t in ts:
+    #         data = {groups[i]: c[i] for i in range(len(c))}
+    #         data['t'] = t
+    #         for key in ['yh', 'yvh']:
+    #             k = ind[key]
+    #             while k < max_ind:
+    #                 if di.iloc[k][f'lam_{key}'] > t:
+    #                     break
+    #                 k += 1
+    #             if k == max_ind:
+    #                 end_lam = 1
+    #             else:
+    #                 end_lam = di.iloc[k][f'lam_{key}']
+    #             ind[key] = k
+    #             start = di.iloc[max(0, k-1)]
+    #             end = di.iloc[k]
+
+    #             if abs(end_lam - start[f'lam_{key}']) < 1e-8:
+    #                 import ipdb; ipdb.set_trace()
+    #             lam_interp = (t - start[f'lam_{key}']) / (end_lam - start[f'lam_{key}'])
+    #             lam_interp = np.clip(lam_interp, 0, 1)
+    #             r = gamma(lam_interp, np.sqrt(start[key])[None, :], np.sqrt(end[key])[None, :])
+    #             data[key] = (r ** 2).squeeze()
+    #             errkey = 'err' if key == 'yh' else 'verr'
+    #             fkey = 'favg' if key == 'yh' else 'vfavg'
+    #             data[errkey] = (
+    #                 np.argmax(data[key], axis=-1) != labels[key]).mean()
+    #             data[fkey] = - \
+    #                 np.log(data[key])[np.arange(
+    #                     len(labels[key])), labels[key]].mean()
+    #         new_d.append(data)
+    # return pd.DataFrame(new_d)
                 ##################### old #########################
                 # diff = 1
                 # for k in ks:
@@ -132,6 +170,7 @@ def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', lo
         if configs.get('corner') == 'normal':
             file_list.append(f)
 
+    file_list = file_list[1814:]
     data = get_data()
     labels = {}
     qs = {}
@@ -144,18 +183,14 @@ def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', lo
         qs[k] = np.sqrt(np.expand_dims(y, axis=0))
         ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
         labels[k] = y_
-    if not separate:
-        qs = np.concatenate([qs['yh'], qs['yvh']], axis=1)
-        ps = np.concatenate([ps['yh'], ps['yvh']], axis=1)
-        labels = np.hstack([labels['yh'], labels['yvh']])
+    # if not separate:
+    #     qs = np.concatenate([qs['yh'], qs['yvh']], axis=1)
+    #     ps = np.concatenate([ps['yh'], ps['yvh']], axis=1)
+    #     labels = np.hstack([labels['yh'], labels['yvh']])
 
     didx_all = None
     cols = ['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd', 't', 'err', 'verr', 'favg',
-            'vfavg']
-    if separate:
-        cols = cols + ['lam_yh', 'lam_yvh']
-    else:
-        cols = cols + ['lam']
+            'vfavg', 'lam_yh', 'lam_yvh', 'lam', 'ent_yh', 'ent_yvh']
     for f in tqdm.tqdm(file_list):
         load_fn = os.path.join('results/models/loaded', os.path.basename(f))
         save_fn = os.path.join(save_loc, os.path.basename(f))
@@ -178,32 +213,42 @@ def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', lo
                     probs = False
                 else:
                     probs = True
+                def entropy(p):
+                    return (p*np.log(p)).sum(-1).mean(-1)
+                d[f'ent_{key}'] = entropy(yhs[key])
                 yhs[key] = np.sqrt(yhs[key])
-                if separate:
-                    qs_ = np.repeat(qs[key], yhs[key].shape[0], axis=0)
-                    ps_ = np.repeat(ps[key], yhs[key].shape[0], axis=0)
-                    d[f'lam_{key}'] = project(yhs, ps_, qs_)
-            if not separate:
-                # yhs = np.stack([yhs['yh'], yhs['yvh']])
-                yhs = np.concatenate([yhs['yh'], yhs['yvh']], axis=1)
-                qs_ = np.repeat(qs, yhs.shape[0], axis=0)
-                ps_ = np.repeat(ps, yhs.shape[0], axis=0)
-                d['lam'] = project(yhs, ps_, qs_)
-            th.save(d, load_fn)
+                # if separate:
+                qs_ = np.repeat(qs[key], yhs[key].shape[0], axis=0)
+                ps_ = np.repeat(ps[key], yhs[key].shape[0], axis=0)
+                d[f'lam_{key}'] = project(yhs[key], ps_, qs_)
+            # if not separate:
+            yhs = np.concatenate([yhs['yh'], yhs['yvh']], axis=1)
+            qs_ = np.repeat(np.concatenate([qs['yh'], qs['yvh']], axis=1), yhs.shape[0], axis=0)
+            ps_ = np.repeat(np.concatenate([ps['yh'], ps['yvh']], axis=1), yhs.shape[0], axis=0)
+            d['lam'] = project(yhs, ps_, qs_)
             didx_all = pd.concat([didx_all, d[cols]])
             th.save(
-                didx_all, f'/home/ubuntu/ext_vol/inpca/results/models/loaded/didx_{didx_fn}.p')
+                didx_all, f'/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_{didx_fn}.p')
         else:
             continue
         if reparam:
+            d_reparam = pd.DataFrame()
             for key in ['yh', 'yvh']:
                 if not probs:
                     d[key] = d.apply(lambda r: np.exp(r[key]), axis=1)
-            new_d = reparam(d, labels, num_ts=100,
+                d['acc'] = 1-d['err']
+                ts, yhs, errs, favgs = reparameterize(d, labels, num_ts=100, idx='acc', key=key,
                             groups=['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd'])
-            th.save(new_d, save_fn)
-
+                d_reparam[key] = yhs
+                d_reparam['t'] = ts
+                errkey = 'err_interp' if key == 'yh' else 'verr_interp'
+                fkey = 'favg_interp' if key == 'yh' else 'vfavg_interp'
+                d_reparam[errkey] = errs
+                d_reparam[fkey] = favgs
+            r_cols = ['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd']
+            d_reparam[r_cols] = d[r_cols].iloc[0]
+            th.save(d_reparam, save_fn)
 
 if __name__ == '__main__':
     # compute_lambda(reparam=False, force=True)
-    compute_lambda(reparam=False, force=False, separate=False, loc='results/models/all', save_loc='results/models/reindexed_all', didx_fn='nonsep')
+    compute_lambda(reparam=True, force=False, loc='results/models/all', save_loc='results/models/reindexed_all', didx_fn='all_with_progress')

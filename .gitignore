@@ -24,3 +24,5 @@ create_adam_torun.py
 inpca_results_mixed/*
 data.p
 notebooks/.ipynb_checkpoints/inpca_plots-checkpoint.ipynb
+notebooks/*.p
+notebooks/plots/*.html
