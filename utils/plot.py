@@ -10,51 +10,63 @@ import numpy as np
 import pandas as pd
 import scipy.cluster.hierarchy as sch
 from utils import CDICT_M
+from matplotlib.colors import ListedColormap
 
 
-def triplot(dc, r, d=3, emph=[], ckey='', empcolor={}, empsize={},
-            cdict=None, cmin=None, cmax=None, discrete_c=False, cbins=None, colorscale='vlag',
+def triplot(dc, r, d=3, 
+            emph=[], ckey='', empcolor={}, empsize={},
+            cdict=None, cmin=None, cmax=None, 
+            discrete_c=False, cbins=None, colorscale='vlag', 
+            cbar_title=None,
             grid_size=0.25, grid_ratio=[5, 3, 2], centers=[0, 0, 0],
-            wspace=0, hspace=0,
-            ax_label=False, legend=False):
+            flip_dims=None,
+            ax_label=True, legend=False, show=False):
 
     widths = grid_ratio[1:]
     heights = grid_ratio[:-1]
     d = len(grid_ratio)
     ncols, nrows = d-1, d-1
     if legend:
-        widths.append(0.1)
-        ncols += 1
+        widths.extend([0.03*sum(widths)]*2)
+        ncols += 2
     fig = plt.figure(figsize=(8*sum(widths)/sum(heights), 8))
     gs = GridSpec(nrows, ncols, width_ratios=widths, height_ratios=heights)
+
+    xx = r['xp'].copy()
+    if flip_dims is not None:
+        for di in flip_dims:
+            xx[:, di] *= -1
 
     if len(emph) > 0:
         iie = []
         for (_, ie) in emph.items():
             iie.extend(ie)
         d_ = dc.drop(iie)
-        xx = r['xp'][d_.index, :]
+        xx_all = xx.copy()
+        xx = xx[d_.index, :]
         d_ = d_.reset_index(drop=True)
     else:
         d_ = dc
-        xx = r['xp']
 
     ee = r['e']
     s = 2
 
     c = d_[ckey]
     if cdict is not None:
+        ckeys = list(cdict.keys())
+        colorscale = ListedColormap([cdict[k] for k in ckeys])
+        cdict = {k:i for (i, k) in enumerate(ckeys)}
         c = c.map(cdict)
+        cmin, cmax=-0.5, len(ckeys)-0.5
     else:
         if discrete_c:
             if cbins is None:
                 cdict = {c: i for (i, c) in enumerate(c.unique())}
-                # print(cdict)
                 c = c.map(cdict)
                 cbins = len(c.unique())
             colorscale = plt.get_cmap(colorscale, cbins)
-    cmin = cmin or c.min()
-    cmax = cmax or c.max()
+        cmin = cmin if cmin is not None else c.min()
+        cmax = cmax if cmax is not None else c.max()
 
     for d1 in range(d-1):
         for d2 in range(d1+1, d):
@@ -66,7 +78,7 @@ def triplot(dc, r, d=3, emph=[], ckey='', empcolor={}, empsize={},
                             rasterized=True)
             if len(emph) > 0:
                 for (name, ie) in emph.items():
-                    sc_emph = ax.scatter(r['xp'][ie, d2], r['xp'][ie, d1], c=empcolor.get(name, 'darkred'),
+                    sc_emph = ax.scatter(xx_all[ie, d2], xx_all[ie, d1], c=empcolor.get(name, 'darkred'),
                                          rasterized=True,
                                          s=empsize.get(name, 8), lw=0.5, alpha=0.5)
             ax.set_xlim([centers[d2]-grid_size*grid_ratio[d2],
@@ -87,6 +99,7 @@ def triplot(dc, r, d=3, emph=[], ckey='', empcolor={}, empsize={},
                 ax.set_xticks([0])
                 if d1 == 0:
                     ax.set_yticks([0, centers[d1] + grid_size*grid_ratio[d1]])
+                    ax.set_xticks([centers[d2] - grid_size*grid_ratio[d2], 0])
                 else:
                     ax.set_yticks([0])
             else:
@@ -95,27 +108,33 @@ def triplot(dc, r, d=3, emph=[], ckey='', empcolor={}, empsize={},
 
     if legend:
         ax = fig.add_subplot(gs[:, -1])
+        spacing = fig.add_subplot(gs[:, -2])
+        spacing.set_visible(False)
         if cdict is not None:
             ticks = list(cdict.keys())
             boundaries = [cdict[k] for k in ticks]
-            clb = plt.colorbar(sc, cax=ax, boundaries=boundaries, ticks=boundaries)
+            clb = plt.colorbar(sc, cax=ax, 
+            boundaries=boundaries, 
+            ticks=boundaries
+            )
             clb.ax.set_yticklabels(ticks)
         else:
-            clb = plt.colorbar(
-                sc, cax=ax)
-        clb.ax.set_title(ckey)
-    plt.subplots_adjust(wspace=wspace, hspace=hspace)
+            clb = plt.colorbar(sc, cax=ax)
+        cbar_title = cbar_title or ckey
+        clb.ax.set_title(cbar_title)
+    plt.subplots_adjust(wspace=0, hspace=0)
 
-    plt.show()
+    if show:
+        plt.show()
     return fig, gs
 
 def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
-              return_d=False, ne=3, dims=[1, 2, 3],
+              ne=3, dims=[1, 2, 3],
               size=5,
               cdict=None,
               cols=['seed', 'm', 'opt', 'err', 'verr',
                     'bs', 'aug', 'bn', 'lr', 'wd'],
-              color='t', colorscale='RdBu', mode='markers',
+              color='t', colorscale='RdBu', 
               xrange=[-1, 1], yrange=[-1, 1], zrange=[-1, 1], opacity=0.7):
 
     for i in range(ne):
@@ -297,7 +316,7 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
                     color_threshold=0.5,
                     above_threshold_color='C0',
                     cols=['m', 'opt', 'bs', 'lr', 'wd', 'aug'], 
-                    key='yh',
+                    key='yh', 
                     ):
     idxs = didx.groupby(cols).indices
 

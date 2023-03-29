@@ -26,3 +26,5 @@ data.p
 notebooks/.ipynb_checkpoints/inpca_plots-checkpoint.ipynb
 notebooks/*.p
 notebooks/plots/*.html
+notebooks/plots/all_models_train_3d.html
+inpca_results_avg_all/*
