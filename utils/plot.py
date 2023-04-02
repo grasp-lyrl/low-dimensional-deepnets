@@ -19,7 +19,7 @@ def triplot(dc, r, d=3,
             discrete_c=False, cbins=None, colorscale='vlag', 
             cbar_title=None,
             grid_size=0.25, grid_ratio=[5, 3, 2], centers=[0, 0, 0],
-            flip_dims=None,
+            flip_dims=None, 
             ax_label=True, legend=False, show=False):
 
     widths = grid_ratio[1:]
@@ -134,11 +134,15 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
               cdict=None,
               cols=['seed', 'm', 'opt', 'err', 'verr',
                     'bs', 'aug', 'bn', 'lr', 'wd'],
+              color_axis=False,
               color='t', colorscale='RdBu', 
+              flip_dims=[], legend=False,
               xrange=[-1, 1], yrange=[-1, 1], zrange=[-1, 1], opacity=0.7):
 
+
     for i in range(ne):
-        dc[f"x{i+1}"] = r['xp'][:, i]
+        sign = -1 if i in flip_dims else 1
+        dc[f"x{i+1}"] = sign*r['xp'][:, i]
 
     d_ = pd.DataFrame()
 
@@ -180,7 +184,7 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                 hovertemplate='<b>%{text}</b><extra></extra>',
                 text=text,
                 mode='markers',
-                showlegend=True,
+                showlegend=legend,
                 name='main',
             )
         )
@@ -199,7 +203,7 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                 hovertemplate='<b>%{text}</b><extra></extra>',
                 text=text,
                 mode='markers',
-                showlegend=True,
+                showlegend=legend,
                 name='main'
             )
         )
@@ -220,10 +224,9 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                     ),
                     mode=empmode,
                     name=name,
-                    showlegend=True
+                    showlegend=legend
                 )
             )
-    axis_color = ['red' if r['e'][i] < 0 else 'black' for i in range(3)]
     fig.update_layout(
         autosize=False,
         width=1000,
@@ -232,12 +235,6 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
         scene_yaxis_range=yrange,
         scene_zaxis_range=zrange,
         template='plotly_white',
-        scene_xaxis_linecolor=axis_color[0],
-        scene_xaxis_linewidth=4.5,
-        scene_yaxis_linecolor=axis_color[1],
-        scene_yaxis_linewidth=4.5,
-        scene_zaxis_linecolor=axis_color[2],
-        scene_zaxis_linewidth=4.5,
         scene_aspectratio={
             'x': xrange[1]-xrange[0],
             'y': yrange[1]-yrange[0],
@@ -250,6 +247,17 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                     xanchor="left",
                     x=0.01)
     )
+    
+    axis_color = ['red' if r['e'][i] < 0 else 'black' for i in range(3)]
+    if color_axis:
+        fig.update_layout(
+            scene_xaxis_linecolor = axis_color[0],
+            scene_xaxis_linewidth=4.5,
+            scene_yaxis_linecolor=axis_color[1],
+            scene_yaxis_linewidth=4.5,
+            scene_zaxis_linecolor=axis_color[2],
+            scene_zaxis_linewidth=4.5,
+        )
     print(r['e'])
 
     return fig
@@ -392,9 +400,9 @@ def plot_explained_var(r, key='yh'):
     ii = np.argsort(np.abs(r['es']))[::-1]
     es = r['es'][ii][:50]
     dset = 'train' if key == 'yh' else 'test'
-    df = pd.DataFrame({'eigenvalue index':np.arange(len(es)), 'explained variance':1 - np.sqrt(1-np.cumsum(es ** 2)/r['fn']**2), 
+    df = pd.DataFrame({'eigenvalue index':np.arange(len(es)), 'explained stress':1 - np.sqrt(1-np.cumsum(es ** 2)/r['fn']), 
                        'data':dset})
     f = plt.figure(figsize=(8, 6))
     g = sns.lineplot(data=df, x='eigenvalue index',
-                 y='explained variance', hue='data', marker="o")
+                 y='explained stress', hue='data', marker="o")
     return df, f

@@ -1,6 +1,5 @@
 from setup import *
 
-
 @call_parse
 def main(
     test: Param('test', bool, default=False),
@@ -42,11 +41,20 @@ def main(
     w = -0.5*w
     r = proj_(w, w.shape[0], 3)
 
+    ne = 50
+    es, vs = sp.eigsh(w, ne, which='LM', return_eigenvectors=True)
+    r['es'] = es
+    r['fn'] = np.linalg.norm(w, 'fro')
+
+    fn = 'test' if test else 'train'
+    df, f = plot_explained_var(r)
+    f.savefig(f'../plots/{fn}_trajectories_inpca_explained_s.pdf')
+
+    centers = [0.08, 0] if test else [0, 0]
     emph = list(didx[didx.m == 'geodesic'].index)
     f, gs = triplot(didx.reset_index(drop=True), r, emph={'geodesic': emph},
                     empsize={'geodesic': 12}, cdict=CDICT_M,
                     empcolor={'geodesic': 'black'}, d=4,
                     ckey='m', colorscale='Set1',
-                    grid_ratio=[4, 4], grid_size=0.06, centers=[0, 0])
-    fn = 'test' if test else 'train'
+                    grid_ratio=[4, 4], grid_size=0.06, centers=centers)
     f.savefig(f'../plots/{fn}_trajectories_inpca.pdf')

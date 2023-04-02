@@ -7,7 +7,6 @@ def main(all: Param('all', bool, default=False),
     err: Param('err', bool, default=False), 
     spread: Param('spread', bool, default=False),
     test: Param('test', bool, default=False),
-    nofcvit: Param('nofcvit', bool, default=False),
     ): 
 
     key = 'yvh' if test else 'yh'
@@ -34,7 +33,7 @@ def main(all: Param('all', bool, default=False),
                         flip_dims=flip_dims,
                         ax_label=True,
                         ckey='m', cdict=CDICT_M,
-                        legend=True,
+                        legend=False,
                         )
         f.savefig(f'../plots/all_models_{fn}_2d.pdf', bbox_inches='tight')
 
@@ -110,33 +109,3 @@ def main(all: Param('all', bool, default=False),
                         flip_dims=flip_dims,
                     )
         f.savefig(f'../plots/all_models_{fn}_2d_spread.pdf', bbox_inches='tight')
-
-    if nofcvit:
-        r = th.load(f"/home/ubuntu/ext_vol/inpca/inpca_results_all/r_{key}_nofcvit.p")
-        didx = th.load('/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_yvh_nofcvit.p')
-        emph = list(didx[didx.m == 'geodesic'].index)
-        centers = all_centers[:2]
-        grid_ratio = [3, 3]
-        grid_size = 0.3
-        cdict = {l: plt.get_cmap('rocket', 4).colors[i] for (
-            i, l) in enumerate(['none', '2', '1', '0'])}
-        f, gs = triplot(didx, r,
-                        emph={
-                            'geodesic': emph,
-                            'ref1': refs[0], 'ref2': refs[1], 'ref3': refs[2],
-                        },
-                        empsize={
-                            'geodesic': 6,
-                            'ref1': 55, 'ref2': 55, 'ref3': 55
-                        },
-                        empcolor={
-                            'geodesic': 'black',
-                            'ref1': 'black', 'ref2': 'black', 'ref3': 'black',
-                        },
-                        ckey='label', cdict=cdict,
-                        legend=True, cbar_title='label',
-                        grid_ratio=grid_ratio, grid_size=grid_size, centers=centers,
-                        flip_dims=flip_dims,
-                        )
-        f.savefig(
-            f'../plots/all_models_{fn}_2d_spread.pdf', bbox_inches='tight')

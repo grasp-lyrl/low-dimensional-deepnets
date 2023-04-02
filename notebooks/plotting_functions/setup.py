@@ -8,7 +8,7 @@ from fastcore.script import *
 import scipy.sparse.linalg as sp
 import seaborn as sns
 import matplotlib.pyplot as plt
-from utils import triplot, CDICT_M, get_idx, plot_dendrogram
+from utils import triplot, CDICT_M, get_idx, plot_dendrogram, plot_explained_var, plotly_3d
 from embed import proj_
 import h5py
 plt.rcParams['figure.figsize'] = [4, 4]

@@ -45,6 +45,7 @@ def main(test: Param('test', bool, default=False)):
                     ::step])].reset_index(), x='t', y='value', color='b')
     ax.set(ylabel='Distance to mean trajectory')
     ax.set(xlabel='Progress')
+    ax.set(ylim=(0,1))
     ticks = [i.get_text() for i in ax.get_xticklabels()]
     ticks = ax.set_xticks(np.arange(0, len(ticks)),
                         all_d.t.unique()[::step].round(1))

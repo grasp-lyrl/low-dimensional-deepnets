@@ -61,7 +61,7 @@ def get_opt(optim_args, model):
     return optimizer, scheduler
 
 
-def get_init(init_args, model, dev='cuda', data=None):
+def get_init(init_args, model, dev='cuda', data=None, save_fn=''):
     init_fn = init_args['init_fn']
     if init_fn == 'corner':
         corner = init_args['corner']
@@ -74,8 +74,10 @@ def get_init(init_args, model, dev='cuda', data=None):
                 ds_init = relabel_data(data, frac=1)
             elif corner == "subsample":
                 ds_init = get_data(init_args['init_data'], dev=dev)
-            init_ss = fit(model, ds_init, T=opt_args['T'], bs=opt_args['bs'],
+            init_ss = fit(model, ds_init, epochs=opt_args['epochs'], bs=opt_args['bs'],
                         autocast=opt_args['autocast'], opt=opt, sched=sched)
+            if save_fn:
+                th.save(init_ss,  save_fn)
             return model
     else:
         init_fn = getattr(init, init_fn)
@@ -202,12 +204,13 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
 
 def relabel_data(ds, frac=1):
     ds_new = deepcopy(ds)
-    dev = ds['y'].device
-    n = len(ds['y'])
+    targets = th.tensor(ds['train'].targets)
+    n = len(targets)
     n_rand = int(n*frac)
     idx = th.randperm(n)[:n_rand]
-    y_rand = th.randint(0, 10, (n_rand, )).long().to(dev)
-    ds_new['y'][idx] = y_rand
+    y_rand = th.randint(0, 10, (n_rand, )).long()
+    targets[idx] = y_rand
+    ds_new['train'].targets = list(targets)
     return ds_new
 
 

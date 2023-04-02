@@ -28,6 +28,7 @@ def main(
 
     idx = didx.groupby(cols).indices
 
+    # compute average distance between trajectories
     pdists = np.zeros([100, len(idx), len(idx)])
     keys = list(idx.keys())
     for i in range(len(idx)):
@@ -80,6 +81,4 @@ def main(
         f, ax = plt.subplots()
         indices = permImp['importances_mean'].argsort()
         sns.boxplot(data=data, orient='h', ax=ax)
-        ax.set(xlim=(-0.02, 0.35))
-
         f.savefig(f'../plots/{fn}_feature_permutation_importance.pdf', bbox_inches='tight')
