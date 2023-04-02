@@ -68,10 +68,14 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
         )
 
 
-def process_pair(pair, file_list, loc="inpca_results", keys=["yh"], save_didx=False):
+def process_pair(pair, file_list, loc="inpca_results",
+                 idx=["seed", "m", "opt", "t", "err",
+                      "verr", "bs", "aug", "lr", "wd"],
+                  keys=["yh", "yvh"], save_didx=False):
     print(pair)
     s1, s2 = pair
     dist_from_flist(f1=file_list[s1], f2=file_list[s2], keys=keys, 
+                    idx=idx, 
                     loc=loc, fn=f"{s1}_{s2}", save_didx=save_didx)
 
 
@@ -82,6 +86,7 @@ def compute_distance(
     groupby=["seed", "m"],
     save_didx=False,
     save_loc="inpca_results_avg",
+    idx=["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"],
 ):
     if all_files is None:
         all_files = glob.glob(os.path.join(loc, "*}.p"))
@@ -104,7 +109,9 @@ def compute_distance(
     for pair in load_list:
         if len(pair[0]) == 0 or len(pair[1]) == 0:
             continue
-        process_pair(file_list=file_list, loc=save_loc, save_didx=save_didx, pair=pair)
+        process_pair(file_list=file_list, loc=save_loc, 
+                     idx=idx,
+                     save_didx=save_didx, pair=pair)
     # mp.set_start_method('spawn')
     # with mp.Pool(processes=4) as pool:
     #     pool.map(
@@ -132,14 +139,14 @@ def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_r
     pairs = list(combinations(groups, 2)) + [(r, r) for r in groups]
     for pair in tqdm.tqdm(pairs):
         r, c = pair
+        ridxs, cidxs = indices[r], indices[c]
+        r = (r, ) if not isinstance(r, tuple) else r
+        c = (c, ) if not isinstance(c, tuple) else c
         fname = os.path.join(loc, f"w_{key}_{r}_{c}.p")
         if not os.path.exists(fname):
             fname = os.path.join(loc, f"w_{key}_{c}_{r}.p")
             c, r = pair
 
-        ridxs, cidxs = indices[r], indices[c]
-        r = (r, ) if not isinstance(r, tuple) else r
-        c = (c, ) if not isinstance(c, tuple) else r
         try:
             w_ = th.load(fname)
         except:
@@ -245,12 +252,12 @@ def compute_path_distance(
     save_loc="inpca_results_avg",
     key="yh",
     fn="pointwise",
+    idx = ["seed", "m", "opt", "err", "verr", "bs", "aug", "lr", "wd"],
     T=100,
 ):
     if all_files is None:
         all_files = glob.glob(os.path.join(loc, "*}.p"))
         all_files = np.array(all_files)
-    idx = ["seed", "m", "opt", "err", "verr", "bs", "aug", "lr", "wd"]
     if load:
         didx = th.load(os.path.join(save_loc, f"didx_{fn}_{key}.p")).reset_index(
             drop=True
@@ -334,12 +341,13 @@ if __name__ == "__main__":
     #################
     # get all files #
     #################
-    all_files = []
-    for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")):
-        configs = json.loads(f[f.find("{"): f.find("}") + 1])
-        if 42 <= configs['seed'] <= 46 and configs['aug'] == 'none':
-            all_files.append(f)
-    all_files = np.array(all_files)
+    # all_files = []
+    # # for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")):
+    # #     configs = json.loads(f[f.find("{"): f.find("}") + 1])
+    # #     if 42 <= configs['seed'] <= 46 and configs['aug'] == 'none':
+    # #         all_files.append(f)
+    # all_files = glob.glob(os.path.join("results/models/reindexed_all", "*}.p"))
+    # all_files = np.array(all_files)
     # print(len(all_files))
     # load_list = [((i, False), (j, True)) for i in range(42, 46) for j in range(42, 46)]
 
@@ -357,10 +365,6 @@ if __name__ == "__main__":
 
     # join(loc="inpca_results", key="yvh", groupby=["seed", "m"], save_loc="inpca_results_all", fn="all")
     # # get didxs
-    # join_didx(loc="inpca_results_avg_new", key="yh", fn="all", groupby=["seed", "m"])
-
-    # # Join
-    # join(loc="inpca_results_avg_new", key="yh", groupby=["seed", "m"], save_loc="inpca_results_avg_new", fn="all")
 
     ################################
     # compute distance to geodesic #
@@ -427,11 +431,51 @@ if __name__ == "__main__":
     # compute 3d distance tensor, including geodesic #
     ##################################################
 
-    compute_path_distance(
-        all_files=all_files,
-        loc="results/models/reindexed_new",
-        save_loc="inpca_results_avg_new",
-        load=False,
-        key="yvh",
-        fn="3d_geod",
-    )
+    # compute_path_distance(
+    #     all_files=all_files[58:],
+    #     loc="results/models/reindexed_all",
+    #     save_loc="inpca_results_avg_new",
+    #     load=False,
+    #     idx = ["seed", "m", "opt", "err_interp", "verr_interp", "bs", "aug", "lr", "wd"],
+    #     key="yh",
+    #     fn="3d_geod",
+    # )
+
+    # def fn_from_config(c, root='/home/ubuntu/ext_vol/inpca/results/models/all/'):
+    #     if c[0] == 0:
+    #         return '/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na","interp":false}.p'
+    #     else:
+    #         if len(c) == 8:
+    #             corner=c[-1]
+    #         else:
+    #             corner = 'normal'
+    #         dic = {'seed':int(c[0]), 'bseed':-1, 'aug':c[1], 'm':c[2], 
+    #                     'bn':True, 'drop':0.0, 'opt':c[4], 'bs':int(c[5]), 'lr':float(c[3]), 'wd':float(c[6]),
+    #                     'corner':corner}
+    #         fn = json.dumps(dic).replace(' ', '') + '.p'
+    #         return os.path.join(root, fn)
+
+    # didx = pd.DataFrame(th.load(
+    #     '/home/ubuntu/ext_vol/inpca/inpca_results_all/corners/didx_yh_all.p')['dr'])
+
+    # cols = ['aug', 'm', 'lr', 'opt', 'bs', 'wd', 'corner']
+    # keys = didx.groupby(cols).indices.keys()
+    # ll = [tuple([i] + list(r[:-1]) + [c]) for i in range(42, 52) for r in keys for c in ['normal', r[-1]]]
+    # fs = [fn_from_config(c) for c in ll]
+    # print(len(fs))
+
+    # compute_distance(
+    #     all_files=fs,
+    #     # load_list=None,
+    #     loc="results/models/loaded",
+    #     groupby=["corner"],
+    #     save_didx=True,
+    #     idx=["seed", "m", "opt", "t", "err",
+    #         "verr", "bs", "aug", "lr", "wd", "corner"],
+    #     save_loc="inpca_results_all/corners",
+    # )
+
+    join_didx(loc="inpca_results_all/corners", key="yh", fn="all", groupby=["corner"])
+
+    # # Join
+    join(loc="inpca_results_all/corners", key="yh", groupby=["corner"], save_loc="inpca_results_all/corners", fn="all")
