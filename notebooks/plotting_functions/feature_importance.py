@@ -1,11 +1,11 @@
 from setup import *
-from sklearn.preprocessing import LabelEncoder
-from sklearn.ensemble import RandomForestRegressor
+from autogluon.tabular import TabularDataset, TabularPredictor
 
 @call_parse
 def main(
     test: Param('test', bool, default=False),
-    perm: Param('perm', bool, default=False)
+    perm: Param('perm', bool, default=False),
+    t: Param('t', int, default=100)
     ):
 
     key = 'yvh' if test else 'yh'
@@ -51,34 +51,16 @@ def main(
         dcross[f] = dcross[[f'{f}_x', f'{f}_y']].astype(
         str).apply(' '.join, axis=1)
 
-    for f in features:
-        le = LabelEncoder()
-        dcross[f] = le.fit_transform(dcross[f])
+    features = features +  ['d2geod_x', 'd2geod_y', 'dcross']
+    dcross = dcross[features]
+    agg_fn = {f:'first' for f in features}
+    dcross = dcross.groupby(['dcross']).aggregate(agg_fn).reset_index(drop=True)
 
-    x = np.stack(dcross[features+['d2geod_x', 'd2geod_y']].values)
-    model = RandomForestRegressor()
-    model.fit(x, dcross['dcross'])
-    model.score(x, dcross['dcross'])
 
-    importances = model.feature_importances_
-    indices = np.argsort(importances)
-
+    train_data = TabularDataset(dcross)
+    predictor = TabularPredictor(label='dcross').fit(train_data)
+    train_importances = predictor.feature_importance(data=train_data)
     f, ax = plt.subplots()
-    ax.barh(range(len(importances)), importances[indices])
-    ax.set_yticks(range(len(importances)))
-    _ = ax.set_yticklabels(np.array(features + ['d2geod_x', 'd2geod_y'])[indices])
-
-    f.savefig(f'../plots/{fn}_feature_importance.pdf', bbox_inches='tight')
-
-    if perm:
-        from sklearn.inspection import permutation_importance
-        features = features + ['d2geod_x', 'd2geod_y']
-        permImp = permutation_importance(model, x, dcross['dcross'], n_repeats=100, 
-                    random_state=0)
-        data = pd.DataFrame(permImp['importances'].T, columns=features)
-
-        data = pd.DataFrame(permImp['importances'].T, columns=features)
-        f, ax = plt.subplots()
-        indices = permImp['importances_mean'].argsort()
-        sns.boxplot(data=data, orient='h', ax=ax)
-        f.savefig(f'../plots/{fn}_feature_permutation_importance.pdf', bbox_inches='tight')
+    sns.boxplot(data=train_importances.loc[['m', 'bs','opt','aug','wd']].reset_index(), x='importance', y='index', orient='h', ax=ax)
+    ax.set(ylabel='feature')
+    f.savefig('../plots/feature_importance.pdf', bbox_inches='tight')

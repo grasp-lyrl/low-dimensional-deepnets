@@ -70,11 +70,12 @@ def triplot(dc, r, d=3,
 
     for d1 in range(d-1):
         for d2 in range(d1+1, d):
-
             ax = fig.add_subplot(gs[d1, d2-1])
             sc = ax.scatter(xx[:, d2], xx[:, d1],
                             c=c, vmin=cmin, vmax=cmax, 
-                            s=s, lw=0.5, alpha=0.5, cmap=colorscale,
+                            s=s, lw=0.5, 
+                            alpha=0.5, 
+                            cmap=colorscale,
                             rasterized=True)
             if len(emph) > 0:
                 for (name, ie) in emph.items():
@@ -134,7 +135,7 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
               cdict=None,
               cols=['seed', 'm', 'opt', 'err', 'verr',
                     'bs', 'aug', 'bn', 'lr', 'wd'],
-              color_axis=False,
+              color_axis=False, discrete_c=False,
               color='t', colorscale='RdBu', 
               flip_dims=[], legend=False,
               xrange=[-1, 1], yrange=[-1, 1], zrange=[-1, 1], opacity=0.7):
@@ -153,7 +154,6 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
         text = 't: ' + dc['t'].astype(str) + '<br>' + text
 
     c = dc[color]
-    discrete_c = len(c.unique()) < 10
     if discrete_c and cdict is None:
         colors = getattr(palettes, colorscale)[max(len(c.unique()), 3)]
         cdict = {c: colors[i] for (i, c) in enumerate(c.unique())}
@@ -196,9 +196,9 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                 z=d_[f'x{dims[2]}'],
                 marker=dict(
                     size=size,
-                    opacity=opacity,
-                    color=c,
-                    colorscale=colorscale
+                    # opacity=opacity,
+                    color=c.values,
+                    # colorscale=colorscale
                 ),
                 hovertemplate='<b>%{text}</b><extra></extra>',
                 text=text,
