@@ -33,7 +33,7 @@ def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"]):
 def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
                     ss=slice(0, -1, 2),
                     idx=["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"],
-                    avg_err=False, loaded=False, save_didx=False):
+                    avg_err=True, loaded=False, save_didx=False):
     d1 = load_d(
         file_list=f1,
         avg_err=avg_err,
@@ -146,6 +146,7 @@ def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_r
         if not os.path.exists(fname):
             fname = os.path.join(loc, f"w_{key}_{c}_{r}.p")
             c, r = pair
+            cidxs, ridxs = indices[c], indices[r]
 
         try:
             w_ = th.load(fname)
@@ -464,18 +465,18 @@ if __name__ == "__main__":
     # fs = [fn_from_config(c) for c in ll]
     # print(len(fs))
 
+    # fs = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/corners/*.p')
     # compute_distance(
     #     all_files=fs,
-    #     # load_list=None,
-    #     loc="results/models/loaded",
-    #     groupby=["corner"],
+    #     groupby=["iseed"],
     #     save_didx=True,
-    #     idx=["seed", "m", "opt", "t", "err",
+    #     idx=["seed", "iseed", "m", "opt", "t", "err", "isinit",
     #         "verr", "bs", "aug", "lr", "wd", "corner"],
     #     save_loc="inpca_results_all/corners",
     # )
 
-    join_didx(loc="inpca_results_all/corners", key="yh", fn="all", groupby=["corner"])
-
-    # # Join
-    join(loc="inpca_results_all/corners", key="yh", groupby=["corner"], save_loc="inpca_results_all/corners", fn="all")
+    from eigvals import main
+    for k in ['yh', 'yvh']:
+        join_didx(loc="inpca_results_all/corners", key=k, fn="test", groupby=["iseed"])
+        join(loc="inpca_results_all/corners", key=k, fn="test", groupby=["iseed"], save_loc="inpca_results_all/corners")
+        main(f'{k}_test', f'{k}_test', "/home/ubuntu/ext_vol/inpca/inpca_results_all/corners")
