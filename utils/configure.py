@@ -14,8 +14,9 @@ import torch.autograd as autograd
 import torch.backends.cudnn as cudnn
 from torch.utils.data.dataset import Dataset
 import os
+from types import SimpleNamespace
 
-from runner import fit
+from runner_corner import fit
 import networks, init
 
 
@@ -61,7 +62,7 @@ def get_opt(optim_args, model):
     return optimizer, scheduler
 
 
-def get_init(init_args, model, dev='cuda', data=None, save_fn=''):
+def get_init(init_args, model, dev='cuda', data=None, save_fn='', init_seed=42):
     init_fn = init_args['init_fn']
     if init_fn == 'corner':
         corner = init_args['corner']
@@ -71,13 +72,20 @@ def get_init(init_args, model, dev='cuda', data=None, save_fn=''):
             opt_args = init_args['init_opts']
             opt, sched = get_opt(opt_args, model)
             if corner == "uniform":
-                ds_init = relabel_data(data, frac=1)
+                fn = os.path.join('/home/ubuntu/ext_vol/data', 
+                                  f"{init_args['corner_data']}_{init_args['corner']}_{init_seed}.p")
+                if os.path.exists(fn):
+                    print('loading data from ', fn)
+                    ds_init = th.load(fn)
+                else:
+                    ds_init = relabel_data(data, frac=1, seed=init_seed)
+                    th.save(ds_init, fn)
             elif corner == "subsample":
                 ds_init = get_data(init_args['init_data'], dev=dev)
-            init_ss = fit(model, ds_init, epochs=opt_args['epochs'], bs=opt_args['bs'],
+            init_ss = fit(model, ds_init, epochs=opt_args['epochs'], bs=opt_args['bs'], save_init=0,
                         autocast=opt_args['autocast'], opt=opt, sched=sched)
             if save_fn:
-                th.save(init_ss,  save_fn)
+                th.save({'data': init_ss, 'configs': SimpleNamespace(**{**init_args})}, save_fn)
             return model
     else:
         init_fn = getattr(init, init_fn)
@@ -202,13 +210,13 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
     return ds
 
 
-def relabel_data(ds, frac=1):
+def relabel_data(ds, frac=1, seed=0):
     ds_new = deepcopy(ds)
-    targets = th.tensor(ds['train'].targets)
+    targets = np.array(ds['train'].targets)
     n = len(targets)
     n_rand = int(n*frac)
-    idx = th.randperm(n)[:n_rand]
-    y_rand = th.randint(0, 10, (n_rand, )).long()
+    idx = np.random.RandomState(seed=seed).permutation(n)[:n_rand]
+    y_rand = np.random.RandomState(seed=seed).randint(0, 10, (n_rand, ))
     targets[idx] = y_rand
     ds_new['train'].targets = list(targets)
     return ds_new

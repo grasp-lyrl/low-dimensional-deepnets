@@ -8,7 +8,8 @@ CHOICES = {
            0.005],
     'bs': [200, 500],
     'aug': ['simple', 'none'],
-    'wd': [0., 1.e-03, 1.e-05]
+    'wd': [0., 1.e-03, 1.e-05],
+    'iseed': range(0, 3),
 }
 
 CDICT_M = {'allcnn': '#e41a1c',

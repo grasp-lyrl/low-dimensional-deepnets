@@ -1,0 +1,17 @@
+---
+init_fn: "corner"
+corner: "uniform"
+corner_data: "CIFAR10"
+init_opts:
+  opt: SGD
+  opt_args:
+    lr: 0.1
+    momentum: 0.9
+    nesterov: true
+    weight_decay: 0.0
+  sched_args: null
+  scheduler: cosine
+  bs: 200
+  epochs: 200
+  T: 50000
+  autocast: true

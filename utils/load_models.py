@@ -8,25 +8,23 @@ from collections import defaultdict
 import tqdm
 
 
-ts = defaultdict(list)
-for bs in [50, 100, 200, 500, 1000]:
-    for epochs in [200, 300]:
-        key = (bs, epochs)
-        t = 0
-        ts[key].append(t)
-        n_batches = 5000 // bs
-        for epoch in range(epochs):
-            for i in range(n_batches):
-                t += 1
-                if epoch < 5 and i % (n_batches // 4) == 0:
-                    ts[key].append(t)
+def get_ts(bs, epochs, save_init=True, save_freq=4):
+    t = 0
+    ts = [t]
+    n_batches = 50000 // bs
+    for epoch in range(epochs):
+        for i in range(n_batches):
+            t += 1
+            if epoch < save_init and i % (n_batches // save_freq) == 0:
+                ts.append(t)
 
-            if 5 <= epoch <= 25:
-                ts[key].append(t)
-            elif 25 < epoch <= 65 and epoch % 4 == 0:
-                ts[key].append(t)
-            elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs - 1):
-                ts[key].append(t)
+        if save_init <= epoch <= 25:
+            ts.append(t)
+        elif 25 < epoch <= 65 and epoch % 4 == 0:
+            ts.append(t)
+        elif epoch > 65 and epoch % 15 == 0 or (epoch == epochs - 1):
+            ts.append(t)
+    return ts
 
 
 def get_idx(dd, cond):
@@ -70,7 +68,6 @@ def load_d(
         except RuntimeError:
             print(f)
             continue
-            # import ipdb; ipdb.set_trace()
         if loaded or isinstance(d_, pd.DataFrame):
             for c in configs:
                 d_ = d_.assign(**{c: configs[c]})
@@ -80,18 +77,16 @@ def load_d(
             loaded_r.append(d_)
         else:
             d = d_["data"]
+            dconf = vars(d_["configs"])
             if any(np.isnan(d[-1]["f"])):
                 nan_models.append(configs)
                 continue
+            ts =  get_ts(configs["bs"], dconf.get("epochs", 200), 
+                         dconf.get('save_init', True), dconf.get('save_freq', 4))
             for i in range(len(d)):
                 t = {}
                 t.update(configs)
-                t.update({"epochs": getattr(d_["configs"], "epochs")})
-                if ts is not None:
-                    t_ = ts[(t["bs"], t["epochs"])][i]
-                else:
-                    t_ = i
-                t.update({"t": t_})
+                t.update({"t": ts[i]})
                 t.update(d[i])
                 for k in keys:
                     if not isinstance(t[k], np.ndarray):

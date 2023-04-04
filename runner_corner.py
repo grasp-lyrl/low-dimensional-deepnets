@@ -12,7 +12,8 @@ import json
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
 
 
-def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2), fname=''):
+def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2), fname='', 
+        save_init=5, save_freq=4):
 
     if np.max(fix_batch) == 0:
         batch_sampler = None
@@ -86,10 +87,10 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
                 opt.step()
             sched.step()
             t += 1
-            if epoch < 5 and i % (len(trainloader) // 4) == 0:
+            if epoch < save_init and i % (len(trainloader) // save_freq) == 0:
                 ss.append(helper(t))
 
-        if 5 <= epoch <= 25:
+        if save_init <= epoch <= 25:
             ss.append(helper(t))
         elif 25 < epoch <= 65 and epoch % 4 == 0:
             ss.append(helper(t))
@@ -101,6 +102,7 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--init-seed', type=int, default=42)
     parser.add_argument('--data-config', '-d',  type=str,
                         default='./configs/data/cifar10-full.yaml',
                         help='dataset name, augmentation')
@@ -116,6 +118,14 @@ def main():
     parser.add_argument('--save-dir', '-s', type=str, 
                         default='results/models/all',
                         help='directory to save results')
+    parser.add_argument('--save-init', type=int,
+                        default=5,
+                        help='whether to save the initial part of training')
+    parser.add_argument('--save-freq', type=int,  
+                        default=4,
+                        help='how frequent to save in the initial part of training')
+    parser.add_argument('--fit', action="store_true",  
+                        help='whether to fit the model after initialization')
 
     args = parser.parse_args()
     seed = args.seed
@@ -131,17 +141,18 @@ def main():
         **{**vars(args), **data_args, **model_args, **optim_args, **init_args})
     print(args)
 
-    fn = json.dumps(
-        dict(seed=seed,
+    fn_dict = dict(seed=seed,
              bseed=args.batch_seed,
+             iseed=args.init_seed,
              aug=args.aug,
              m=os.path.basename(args.model_config)[:-5],
              init=init_args['init_fn'],
+             isinit=False,
              opt=os.path.basename(args.optim_config).split('-')[0],
              bs=args.bs,
              lr=args.opt_args['lr'],
              wd=args.opt_args['weight_decay'])
-    ).replace(' ', '')
+    fn = json.dumps(fn_dict).replace(' ', '')
     print(fn)
 
     setup(2)
@@ -161,11 +172,15 @@ def main():
     m = get_model(model_args, dev=dev)
     optimizer, scheduler = get_opt(optim_args, m)
 
-    m = get_init(init_args, m, data=ds, save_fn=os.path.join(root, fn+'_init.p'))
-    ss = fit(m, ds, epochs=args.epochs, bs=optim_args['bs'], autocast=optim_args['autocast'],
-             opt=optimizer, sched=scheduler, fix_batch=fix_batch, fname=fn)
+    fn_dict.update({'isinit':True})
+    m = get_init(init_args, m, data=ds, init_seed=args.init_seed,
+                 save_fn=os.path.join(root, json.dumps(fn_dict).replace(' ', '')+'.p'))
+    if args.fit:
+        ss = fit(m, ds, epochs=args.epochs, bs=optim_args['bs'], autocast=optim_args['autocast'],
+                save_init=args.save_init, save_freq=args.save_freq,
+                opt=optimizer, sched=scheduler, fix_batch=fix_batch, fname=fn)
 
-    th.save({"data": ss, "configs": args}, os.path.join(root, fn+'.p'))
+        th.save({"data": ss, "configs": args}, os.path.join(root, fn+'.p'))
 
 
 if __name__ == '__main__':
