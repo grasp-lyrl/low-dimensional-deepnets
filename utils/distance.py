@@ -7,7 +7,6 @@ import tqdm
 
 def dbhat(x1, x2, reduction='mean', dev='cuda', debug=False, chunks=0, cross_terms=True):
     # x1, x2 shape (num_points, num_samples, num_classes)
-    print(x1.shape, x2.shape)
     if not cross_terms:
         w = -th.log((th.sqrt(x1) * th.sqrt(x2)).sum(-1))
         if reduction == 'mean':

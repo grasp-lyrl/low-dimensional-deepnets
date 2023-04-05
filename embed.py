@@ -52,11 +52,11 @@ def xembed(
         th.save({"dr": dr, "dc": dc}, os.path.join(loc, "didx_%s.p" % fn))
     n, m = len(dr), len(dc)  # number of models
 
-    x = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(n)]).squeeze()).cpu()
+    x = th.Tensor(np.stack([d1.iloc[i][key].squeeze()[ss] for i in range(n)]).squeeze()).cpu()
     if d2 is None:
-        y = th.Tensor(np.stack([d1.iloc[i][key][ss] for i in range(m)]).squeeze()).cpu()
+        y = th.Tensor(np.stack([d1.iloc[i][key].squeeze()[ss] for i in range(n)]).squeeze()).cpu()
     else:
-        y = th.Tensor(np.stack([d2.iloc[i][key][ss] for i in range(m)]).squeeze()).cpu()
+        y = th.Tensor(np.stack([d2.iloc[i][key].squeeze()[ss] for i in range(m)]).squeeze()).cpu()
 
     if (not os.path.isfile(os.path.join(loc, "w_%s.p" % fn))) or force:
         if "kl" in distf:
@@ -99,7 +99,7 @@ def xembed(
 
 # Calculate the embedding of a distibution q in the intensive embedding of models ps with divergence=distf, supply d_list the precalculated matrix of distances pf p_list.
 def lazy_embed(
-    q=None,
+    new_pts=None,
     ps=None,
     w=None,
     d_mean=None,
@@ -109,17 +109,18 @@ def lazy_embed(
     distf="dbhat",
     ne=3,
     chunks=1,
+    dev='cuda',
 ):
     # w: centered pairwise distance, d_mean: mean before centering
     if dp is None:
-        dp = getattr(distance, distf)(q, ps, chunks=chunks)
+        dp = getattr(distance, distf)(new_pts, ps, chunks=chunks, dev=dev)
     d_mean_mean = np.mean(d_mean)
     if (evals is None) or (evecs is None):
         N, _, _ = ps.shape
         _, _, evals, evecs = proj_(w, N, ne).values()
     dp_mean = dp - np.mean(dp, 1, keepdims=True) - d_mean + d_mean_mean
     dp_mean = -0.5 * dp_mean
-    sqrtsigma = np.sqrt(np.abs(evals))
+    sqrtsigma = np.sign(evals)*np.sqrt(np.abs(evals))
     return (1 / sqrtsigma) * np.matmul(dp_mean, evecs)
 
 

@@ -62,6 +62,12 @@ def gamma(t, p, q):
         p + np.sin(t*ti) / np.sin(ti) * q
     return gamma
 
+def v0(p, q):
+    # p, q shape: nmodels, nsamples, nclasses
+    cospq = np.clip((p*q).sum(-1), 0, 1)
+    ti = np.arccos(cospq)[:, :, None]
+    v0 = -ti*np.cos(ti)/np.sin(ti) * p + ti/np.sin(ti) * q
+    return v0
 
 def reparameterize(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], idx='lam', key='yh', idx_lim=(0,1)):
     new_d = []
@@ -162,15 +168,10 @@ def reparameterize(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], idx='lam',
                 ##################### old #########################
 
 
-def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', loc='results/models/all', save_loc='results/models/reindexed_new'):
-    all_files = glob.glob(os.path.join(loc, '*}.p'))
-    file_list = []
-    for f in all_files:
-        configs = json.loads(f[f.find('{'):f.find('}')+1])
-        if configs.get('corner') == 'normal':
-            file_list.append(f)
+def compute_lambda(file_list, reparam=False, force=False, 
+                   didx_loc='inpca_results_all/corners', align_didx='',
+                   didx_fn='all', save_loc='results/models/reindexed_new'):
 
-    file_list = file_list[1814:]
     data = get_data()
     labels = {}
     qs = {}
@@ -183,26 +184,22 @@ def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', lo
         qs[k] = np.sqrt(np.expand_dims(y, axis=0))
         ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
         labels[k] = y_
-    # if not separate:
-    #     qs = np.concatenate([qs['yh'], qs['yvh']], axis=1)
-    #     ps = np.concatenate([ps['yh'], ps['yvh']], axis=1)
-    #     labels = np.hstack([labels['yh'], labels['yvh']])
 
     didx_all = None
-    cols = ['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd', 't', 'err', 'verr', 'favg',
-            'vfavg', 'lam_yh', 'lam_yvh', 'lam', 'ent_yh', 'ent_yvh']
+    cols = ['seed', 'iseed', 'isinit', 'aug', 'm', 'opt', 'bs', 'lr', 'wd', 't', 'err', 'verr', 'favg',
+            'vfavg', 'lam_yh', 'lam_yvh']
     for f in tqdm.tqdm(file_list):
-        load_fn = os.path.join('results/models/loaded', os.path.basename(f))
         save_fn = os.path.join(save_loc, os.path.basename(f))
         if os.path.exists(save_fn) and not force:
             continue
-        if not os.path.exists(load_fn):
+        if not os.path.exists(f):
             d = load_d(file_list=[f], avg_err=True, probs=False)
         else:
             try:
-                d = th.load(load_fn)
+                d = load_d(file_list=[f], avg_err=True, probs=False)
+                # d = th.load(f)
             except:
-                print(load_fn)
+                print(f)
                 continue
         if d is not None:
             yhs = {}
@@ -213,24 +210,25 @@ def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', lo
                     probs = False
                 else:
                     probs = True
-                def entropy(p):
-                    return (p*np.log(p)).sum(-1).mean(-1)
-                d[f'ent_{key}'] = entropy(yhs[key])
                 yhs[key] = np.sqrt(yhs[key])
-                # if separate:
                 qs_ = np.repeat(qs[key], yhs[key].shape[0], axis=0)
                 ps_ = np.repeat(ps[key], yhs[key].shape[0], axis=0)
                 d[f'lam_{key}'] = project(yhs[key], ps_, qs_)
             # if not separate:
-            yhs = np.concatenate([yhs['yh'], yhs['yvh']], axis=1)
-            qs_ = np.repeat(np.concatenate([qs['yh'], qs['yvh']], axis=1), yhs.shape[0], axis=0)
-            ps_ = np.repeat(np.concatenate([ps['yh'], ps['yvh']], axis=1), yhs.shape[0], axis=0)
-            d['lam'] = project(yhs, ps_, qs_)
+            # yhs = np.concatenate([yhs['yh'], yhs['yvh']], axis=1)
+            # qs_ = np.repeat(np.concatenate([qs['yh'], qs['yvh']], axis=1), yhs.shape[0], axis=0)
+            # ps_ = np.repeat(np.concatenate([ps['yh'], ps['yvh']], axis=1), yhs.shape[0], axis=0)
+            # d['lam'] = project(yhs, ps_, qs_)
             didx_all = pd.concat([didx_all, d[cols]])
             th.save(
-                didx_all, f'/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_{didx_fn}.p')
+                didx_all, os.path.join(didx_loc, f'didx_{didx_fn}.p'))
         else:
             continue
+        if align_didx:
+            d2 = th.load(os.path.join(didx_loc, align_didx))
+            d = didx_all.merge(d2, on=list(didx_all.columns))
+            th.save(d, os.path.join(didx_loc, f'didx_{didx_fn}.p'))
+
         if reparam:
             d_reparam = pd.DataFrame()
             for key in ['yh', 'yvh']:
@@ -250,5 +248,12 @@ def compute_lambda(reparam=False, force=False, separate=False, didx_fn='all', lo
             th.save(d_reparam, save_fn)
 
 if __name__ == '__main__':
-    # compute_lambda(reparam=False, force=True)
-    compute_lambda(reparam=True, force=False, loc='results/models/all', save_loc='results/models/reindexed_all', didx_fn='all_with_progress')
+
+    loc = 'results/models/corners'
+    all_files = glob.glob(os.path.join(loc, '*}.p'))
+    compute_lambda(all_files, reparam=False, force=False, 
+                   save_loc='results/models/all', 
+                   didx_loc='inpca_results_all/corners',
+                   didx_fn='all_with_progress',
+                   align_didx='all',
+                )
