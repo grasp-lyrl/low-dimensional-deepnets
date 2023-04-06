@@ -163,20 +163,63 @@ from compute_dist import *
 # th.save(dd, 'data.p')
 
 
-root = '/home/ubuntu/ext_vol/inpca/inpca_results_all/'
-key = 'yh'
-fn = 'all_geod'
+# root = '/home/ubuntu/ext_vol/inpca/inpca_results_all/'
+# key = 'yh'
+# fn = 'all_geod'
 
-didx = th.load(os.path.join(root, f"didx_geod_all.p")).reset_index(drop=True)
-f = h5py.File(os.path.join(root, f"w_{key}_{fn}.h5"), "r")
-w = f["w"][:]
+# didx = th.load(os.path.join(root, f"didx_geod_all.p")).reset_index(drop=True)
+# f = h5py.File(os.path.join(root, f"w_{key}_{fn}.h5"), "r")
+# w = f["w"][:]
 
-idxs = get_idx(didx, "opt=='sgd'")
-print(len(idxs))
+# idxs = get_idx(didx, "opt=='sgd'")
+# print(len(idxs))
 
-didx_sgd = didx.iloc[idxs].reset_index(drop=True)
-w_sgd = w[idxs, :][:, idxs]
+# didx_sgd = didx.iloc[idxs].reset_index(drop=True)
+# w_sgd = w[idxs, :][:, idxs]
 
-th.save(didx_sgd, os.path.join(root, f"didx_{fn}_sgd.p"))
-h = h5py.File(os.path.join(root, f"w_{fn}_sgd.h5"), 'w')
-dset = h.create_dataset('w', data=w_sgd)
+# th.save(didx_sgd, os.path.join(root, f"didx_{fn}_sgd.p"))
+# h = h5py.File(os.path.join(root, f"w_{fn}_sgd.h5"), 'w')
+# dset = h.create_dataset('w', data=w_sgd)
+
+# convert all loaded df probs to log form
+
+# loc = '/home/ubuntu/ext_vol/inpca/results/models/loaded'
+# all_files = glob.glob(os.path.join(loc, "*}.p"))[1819:]
+# for f in tqdm.tqdm(all_files):
+#     d = th.load(f)
+#     yh = np.stack(d.yh)
+#     yvh = np.stack(d.yvh)
+#     if np.allclose(yh.sum(-1), 1):
+#         print(f)
+#         d['yh'] = np.array_split(np.log(yh), len(d))
+#     if np.allclose(yvh.sum(-1), 1):
+#         print(f)
+#         d['yvh'] = np.array_split(np.log(yvh), len(d))
+#     th.save(d, f)
+
+
+# Redo distance to geodesic
+# import json
+diffs = []
+cols = ['seed', 'aug', 'm', 'lr', 'opt', 'bs', 'wd']
+for r in tqdm.tqdm(range(0, 2300, 100)):
+    didx_geod = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/inpca_results/didx_yh_geod_c{r}.p')['dc']
+    ii_geod = didx_geod.groupby(cols).indices
+    for c in ii_geod.keys():
+        
+        if c[2] == 'geodesic':
+            continue
+        dic = {'seed':int(c[0]), 'bseed':-1, 'aug':c[1], 'm':c[2],
+                    'bn':True, 'drop':0.0, 'opt':c[4], 'bs':int(c[5]), 'lr':float(c[3]), 'wd':float(c[6]),
+                    'corner':'normal', 'interp':False}
+        root = '/home/ubuntu/ext_vol/inpca/results/models/loaded/'
+        fn = json.dumps(dic).replace(' ', '') + '.p'
+        try:
+            d_saved = th.load(os.path.join(root, fn))[didx_geod.columns]
+        except FileNotFoundError:
+            print(fn)
+        
+        if not (didx_geod.iloc[ii_geod[c]].reset_index(drop=True) == d_saved).all().all():
+            diffs.append((r,c))
+            print(r, c)
+th.save(diffs, 'diffs.p')

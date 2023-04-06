@@ -1,0 +1,7 @@
+---
+data: "CIFAR10"
+aug: "none"
+sub_sample: 0
+resize: 1
+noise_rate: 0.5
+shuffle: False
