@@ -1,5 +1,5 @@
 CHOICES = {
-    'seed': range(42, 52),
+    'seed': list(range(42, 52))+[0],
     'm': ["allcnn", "convmixer", "fc",
           "vit", "wr-10-4-8", "wr-16-4-64"],
     'opt': ["adam", "sgd", "sgdn"],
@@ -10,6 +10,7 @@ CHOICES = {
     'aug': ['simple', 'none'],
     'wd': [0., 1.e-03, 1.e-05],
     'iseed': range(0, 3),
+    'isinit': [False, True],
 }
 
 CDICT_M = {'allcnn': '#e41a1c',

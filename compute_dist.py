@@ -17,7 +17,7 @@ from embed import xembed, proj_, lazy_embed
 from utils import load_d, get_idx, CHOICES, dbhat
 
 
-def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"]):
+def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"], remove_f=False):
     load_list_ = product(*[CHOICES[g] for g in groupby])
     d = pd.DataFrame()
     for c in load_list_:
@@ -25,6 +25,8 @@ def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"]):
         if os.path.exists(load_fn):
             di = th.load(load_fn)["dc"]
             d = pd.concat([d, di])
+            if remove_f:
+                os.remove(load_fn)
     save_fn = os.path.join(loc, f"didx_{fn}.p")
     th.save(d.reset_index(drop=True), save_fn)
     print("saved ", save_fn)
@@ -62,7 +64,7 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
             force=True,
             distf="dbhat",
             reduction="mean",
-            chunks=3600,
+            chunks=600,
             proj=False,
             save_didx=save_didx,
         )
@@ -71,9 +73,10 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
 def process_pair(pair, file_list, loc="inpca_results",
                  idx=["seed", "m", "opt", "t", "err",
                       "verr", "bs", "aug", "lr", "wd"],
-                  keys=["yh", "yvh"], save_didx=False):
+                  keys=["yh", "yvh"]):
     print(pair)
     s1, s2 = pair
+    save_didx = (s1 == s2)
     dist_from_flist(f1=file_list[s1], f2=file_list[s2], keys=keys, 
                     idx=idx, 
                     loc=loc, fn=f"{s1}_{s2}", save_didx=save_didx)
@@ -84,9 +87,9 @@ def compute_distance(
     load_list=None,
     loc="results/models/reindexed",
     groupby=["seed", "m"],
-    save_didx=False,
     save_loc="inpca_results_avg",
     idx=["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"],
+    parallel=-1,
 ):
     if all_files is None:
         all_files = glob.glob(os.path.join(loc, "*}.p"))
@@ -102,23 +105,26 @@ def compute_distance(
         load_list = []
         for pair in load_list_:
             s1, s2 = pair
-            if not os.path.exists(os.path.join(save_loc, f"w_yh_{s1}_{s2}.p")):
+            if (not os.path.exists(os.path.join(save_loc, f"w_yh_{s1}_{s2}.p"))) \
+                or (not os.path.exists(os.path.join(save_loc, f"w_yvh_{s1}_{s2}.p"))):
                 load_list.append(pair)
 
     print(len(load_list))
-    for pair in load_list:
-        if len(pair[0]) == 0 or len(pair[1]) == 0:
-            continue
-        process_pair(file_list=file_list, loc=save_loc, 
-                     idx=idx,
-                     save_didx=save_didx, pair=pair)
-    # mp.set_start_method('spawn')
-    # with mp.Pool(processes=4) as pool:
-    #     pool.map(
-    #         partial(process_pair, file_list=file_list, loc=save_loc, save_didx=save_didx), load_list, chunksize=1)
+    if parallel > 0:
+        mp.set_start_method('spawn')
+        with mp.Pool(processes=parallel) as pool:
+            pool.map(
+                partial(process_pair, file_list=file_list, loc=save_loc, idx=idx), load_list, chunksize=1)
+    else:
+        for pair in load_list:
+            if len(pair[0]) == 0 or len(pair[1]) == 0:
+                continue
+            process_pair(file_list=file_list, loc=save_loc, 
+                        idx=idx,
+                        pair=pair)
 
-
-def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_results_avg_new", fn="all"):
+def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], 
+         save_loc="inpca_results_avg_new", fn="all", remove_f=False):
 
     didxs_f = os.path.join(save_loc, f"didx_{fn}.p")
     didxs = th.load(didxs_f).reset_index(drop=True)
@@ -162,37 +168,8 @@ def join(loc="inpca_results_avg_new", key="yh", groupby=["m"], save_loc="inpca_r
         cstart, cend = cidxs[0], cidxs[-1] + 1
         dset[rstart:rend, cstart:cend] = w_
         dset[cstart:cend, rstart:rend] = w_.T
-    # for i in tqdm.tqdm(range(len(groups))):
-    #     r = groups[i]
-    #     ridxs = indices[r]
-    #     if not isinstance(r, tuple):
-    #         r = (r,)
-    #     w_fname = os.path.join(loc, f"w_{key}_{r}_{r}.p")
-    #     w_ = th.load(w_fname)
-
-    #     def is_cts(l):
-    #         return all((np.array(l[1:]) - np.array(l[:-1])) == 1)
-
-    #     assert is_cts(ridxs)  # debug
-    #     rstart, rend = ridxs[0], ridxs[-1] + 1
-    #     dset[rstart:rend, rstart:rend] = w_
-
-    #     cset = [groups[j] for j in range(i + 1, len(groups))]
-    #     for c in cset:
-    #         print(r, c)
-    #         cidxs = indices[c]
-    #         if not isinstance(c, tuple):
-    #             c = (c,)
-    #         fname = os.path.join(loc, f"w_{key}_{r}_{c}.p")
-    #         if os.path.exists(fname):
-    #             w_ = th.load(fname)
-    #         else:
-    #             print(fname)
-    #             continue
-    #         assert is_cts(cidxs)
-    #         cstart, cend = cidxs[0], cidxs[-1] + 1
-    #         dset[rstart:rend, cstart:cend] = w_
-    #         dset[cstart:cend, rstart:rend] = w_.T
+        if remove_f:
+            os.remove(fname)
     f.close()
 
 
@@ -339,34 +316,6 @@ def compute_path_distance(
 
 if __name__ == "__main__":
 
-    #################
-    # get all files #
-    #################
-    # all_files = []
-    # # for f in glob.glob(os.path.join("results/models/reindexed_new", "*}.p")):
-    # #     configs = json.loads(f[f.find("{"): f.find("}") + 1])
-    # #     if 42 <= configs['seed'] <= 46 and configs['aug'] == 'none':
-    # #         all_files.append(f)
-    # all_files = glob.glob(os.path.join("results/models/reindexed_all", "*}.p"))
-    # all_files = np.array(all_files)
-    # print(len(all_files))
-    # load_list = [((i, False), (j, True)) for i in range(42, 46) for j in range(42, 46)]
-
-    # # Compute pairwise dist
-    # compute_distance(
-    #     all_files=all_files,
-    #     # load_list=None,
-    #     load_list=load_list[2:],
-    #     loc="results/models/reindexed_new",
-    #     groupby=["seed", "interp"],
-    #     save_didx=True,
-    #     # save_loc="inpca_results_avg_new",
-    #     save_loc="inpca_results_mixed",
-    # )
-
-    # join(loc="inpca_results", key="yvh", groupby=["seed", "m"], save_loc="inpca_results_all", fn="all")
-    # # get didxs
-
     ################################
     # compute distance to geodesic #
     ################################
@@ -465,18 +414,37 @@ if __name__ == "__main__":
     # fs = [fn_from_config(c) for c in ll]
     # print(len(fs))
 
-    # fs = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/corners/*.p')
-    # compute_distance(
-    #     all_files=fs,
-    #     groupby=["iseed"],
-    #     save_didx=True,
-    #     idx=["seed", "iseed", "m", "opt", "t", "err", "isinit",
-    #         "verr", "bs", "aug", "lr", "wd", "corner"],
-    #     save_loc="inpca_results_all/corners",
-    # )
+    fs_all = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/corners/*.p')
+    fs_noinit = []
+
+    for f in fs_all:
+        configs = json.loads(f[f.find("{"): f.find("}") + 1])
+        if not configs['isinit']:
+            fs_noinit.append(f)
+
+    fs_normal_all = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/loaded/*.p')
+    fs_normal = []
+    for f in fs_normal_all:
+        configs = json.loads(f[f.find("{"): f.find("}") + 1])
+        if configs['m'] == 'allcnn':
+            fs_normal.append(f)
+
+    fs = fs_all + fs_normal + \
+        ['/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na","interp":false}.p']
+    fn = 'allcnn_geod_debug'
+
+    print(len(fs))
+    compute_distance(
+        all_files=fs,
+        groupby=["seed"],
+        idx=["seed", "iseed", "m", "opt", "t", "err", "isinit",
+            "verr", "bs", "aug", "lr", "wd", "corner"],
+        save_loc="inpca_results_all/corners",
+        parallel=2
+    )
 
     from eigvals import main
     for k in ['yh', 'yvh']:
-        join_didx(loc="inpca_results_all/corners", key=k, fn="test", groupby=["iseed"])
-        join(loc="inpca_results_all/corners", key=k, fn="test", groupby=["iseed"], save_loc="inpca_results_all/corners")
-        main(f'{k}_test', f'{k}_test', "/home/ubuntu/ext_vol/inpca/inpca_results_all/corners")
+        join_didx(loc="inpca_results_all/corners", key=k, fn=fn, groupby=["seed"], remove_f=True)
+        join(loc="inpca_results_all/corners", key=k, fn=fn, groupby=["seed"], save_loc="inpca_results_all/corners", remove_f=True)
+        main(fn=f'{k}_{fn}', save_fn=f'{k}_{fn}', cond='', root="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners")
