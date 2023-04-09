@@ -9,11 +9,12 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 import scipy.cluster.hierarchy as sch
-from utils import CDICT_M
+from utils import CDICT_M 
+from utils.embed import explained_stress
 from matplotlib.colors import ListedColormap
 
 
-def triplot(dc, r, d=3, 
+def triplot(dc, r, d=3, dims=[0,1,2],
             emph=[], ckey='', empcolor={}, empsize={},
             cdict=None, cmin=None, cmax=None, 
             discrete_c=False, cbins=None, colorscale='vlag', 
@@ -49,7 +50,7 @@ def triplot(dc, r, d=3,
         d_ = dc
 
     ee = r['e']
-    s = 2
+    s = 4
 
     c = d_[ckey]
     if cdict is not None:
@@ -70,16 +71,18 @@ def triplot(dc, r, d=3,
 
     for d1 in range(d-1):
         for d2 in range(d1+1, d):
+            d1_ = dims[d1]
+            d2_ = dims[d2]
             ax = fig.add_subplot(gs[d1, d2-1])
-            sc = ax.scatter(xx[:, d2], xx[:, d1],
+            sc = ax.scatter(xx[:, d2_], xx[:, d1_],
                             c=c, vmin=cmin, vmax=cmax, 
-                            s=s, lw=0.5, 
+                            s=16, lw=0.5, 
                             alpha=0.5, 
                             cmap=colorscale,
                             rasterized=True)
             if len(emph) > 0:
                 for (name, ie) in emph.items():
-                    sc_emph = ax.scatter(xx_all[ie, d2], xx_all[ie, d1], c=empcolor.get(name, 'darkred'),
+                    sc_emph = ax.scatter(xx_all[ie, d2_], xx_all[ie, d1_], c=empcolor.get(name, 'darkred'),
                                          rasterized=True,
                                          s=empsize.get(name, 8), lw=0.5, alpha=0.5)
             ax.set_xlim([centers[d2]-grid_size*grid_ratio[d2],
@@ -94,13 +97,28 @@ def triplot(dc, r, d=3,
 
             if d2 == d1+1:
                 if ax_label:
-                    ax.set_xlabel(f'PC{d2+1}')
-                    ax.set_ylabel(f'PC{d1+1}')
+                    ax.set_xlabel(f'PC{d2_+1}')
+                    ax.set_ylabel(f'PC{d1_+1}')
                 ax.grid(False)
                 ax.set_xticks([0])
+                d1_lims = [centers[d1] + grid_size*grid_ratio[d1], centers[d1]-grid_size*grid_ratio[d1]]
+                d2_lims = [centers[d2] + grid_size*grid_ratio[d2], centers[d2]-grid_size*grid_ratio[d2]]
                 if d1 == 0:
-                    ax.set_yticks([0, centers[d1] + grid_size*grid_ratio[d1]])
-                    ax.set_xticks([centers[d2] - grid_size*grid_ratio[d2], 0])
+                    ax.set_yticks([0, d1_lims[0], d1_lims[1]],
+                                  labels=[str(0.0), str(np.round(d1_lims[0], 2)), str(np.round(d1_lims[1], 2))])
+                    if d > 2:
+                        ax.set_xticks([d2_lims[1], 0, d2_lims[0]-0.1], 
+                                    labels=[str(np.round(d2_lims[1],2)), str(0.0), str(np.round(d2_lims[0]-0.1,2))])
+                    else:
+                        # ax.set_xticks([d2_lims[1], 0, d2_lims[0]], 
+                        #             labels=[str(np.round(d2_lims[1],2)), str(0.0), str(np.round(d2_lims[0],2))])
+                        ax.set_xticks([0, d2_lims[0]], 
+                                    labels=[str(0.0), str(np.round(d2_lims[0],2))])
+                elif d1 == 1:
+                    ax.set_yticks([d1_lims[1], 0],
+                                  labels=[str(np.round(d1_lims[1],2)), str(0.0)])
+                    ax.set_xticks([d2_lims[1], 0, d2_lims[0]], 
+                                  labels=[str(np.round(d2_lims[1],2)), str(0.0), str(np.round(d2_lims[0],2))])
                 else:
                     ax.set_yticks([0])
             else:
@@ -120,7 +138,7 @@ def triplot(dc, r, d=3,
             )
             clb.ax.set_yticklabels(ticks)
         else:
-            clb = plt.colorbar(sc, cax=ax)
+            clb = plt.colorbar(sc, cax=ax, ticks=[0,0.5,1])
         cbar_title = cbar_title or ckey
         clb.ax.set_title(cbar_title)
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -325,50 +343,56 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
                     above_threshold_color='C0',
                     cols=['m', 'opt', 'bs', 'lr', 'wd', 'aug'], 
                     key='yh', 
+                    show_err=False,
                     ):
     idxs = didx.groupby(cols).indices
 
-    fig, ax = plt.subplots(1, 2, gridspec_kw={'width_ratios':[3, 1]}, figsize=(10, 24))
+    if show_err:
+        fig, ax = plt.subplots(1, 2, gridspec_kw={'width_ratios':[3, 1]}, figsize=(10, 24))
+        dend_ax, err_ax = ax
+    else:
+        fig, dend_ax = plt.subplots(figsize=(10, 24))
 
     dend = sch.dendrogram(linkage, orientation='right',
                         no_plot=True, color_threshold=color_threshold)
     label_colors = [cdict[m] for m in ylabels[dend['leaves'], color_by]]
     dend = sch.dendrogram(linkage, orientation='right', labels=np.array(
-        ylabels[:, 0]), color_threshold=color_threshold, ax=ax[0],
+        ylabels[:, 0]), color_threshold=color_threshold, ax=dend_ax,
         above_threshold_color=above_threshold_color)
 
     # barplot of errors
-    vkey = 'verr' if key == 'yvh' else 'err'
-    err = []
-    for c in ylabels[dend['leaves'][::-1], :]:
-        err.append(didx.iloc[idxs[tuple(c)]][vkey].mean())
+    if show_err:
+        vkey = 'verr' if key == 'yvh' else 'err'
+        err = []
+        for c in ylabels[dend['leaves'][::-1], :]:
+            err.append(didx.iloc[idxs[tuple(c)]][vkey].mean())
 
-    ylabels_combined = ['.'.join(l) for l in ylabels.astype(str)]
-    models = np.array(ylabels_combined)[dend['leaves'][::-1]]
-    data = pd.DataFrame(np.vstack([models, err]).T, columns=['model', 'err'])
-    data['err'] = data['err'].astype(float)
+        ylabels_combined = ['.'.join(l) for l in ylabels.astype(str)]
+        models = np.array(ylabels_combined)[dend['leaves'][::-1]]
+        data = pd.DataFrame(np.vstack([models, err]).T, columns=['model', 'err'])
+        data['err'] = data['err'].astype(float)
 
-    barc = [cdict[m.split('.')[color_by]] for m in models]
-    sns.barplot(x="err", y="model", data=data, ax=ax[1], palette=barc).set(
-        yticklabels=[], ylabel="")
-    ax[1].set_xlim([0, 1])
-    ax[1].invert_xaxis()
-    ax[1].yaxis.set_ticks_position('none')
-    ax[1].grid(axis='y')
+        barc = [cdict[m.split('.')[color_by]] for m in models]
+        sns.barplot(x="err", y="model", data=data, ax=err_ax, palette=barc).set(
+            yticklabels=[], ylabel="")
+        err_ax.set_xlim([0, 1])
+        err_ax.invert_xaxis()
+        err_ax.yaxis.set_ticks_position('none')
+        err_ax.grid(axis='y')
 
 
-    yax = ax[0].get_yaxis()
+    yax = dend_ax.get_yaxis()
     r = yax.set_tick_params(pad=103)
     for (ik, k) in enumerate([1, 2, 3, 4, 5]):
-        secax = ax[0].secondary_yaxis('left')
-        secax.set_yticks(ax[0].get_yticks())
+        secax = dend_ax.secondary_yaxis('left')
+        secax.set_yticks(dend_ax.get_yticks())
         secax.set_yticklabels(ylabels[dend['leaves'], k])
         secax.get_yaxis().set_tick_params(pad=103-(ik+1)*20, labelsize=5, length=0)
         for (n, y) in enumerate(secax.get_ymajorticklabels()):
             y.set_color(label_colors[n])
 
     plt.subplots_adjust(wspace=0)
-    for (n, x) in enumerate(ax[0].get_ymajorticklabels()):
+    for (n, x) in enumerate(dend_ax.get_ymajorticklabels()):
         # x.set_color(cdict[x.get_text().split(' ')[color_by]])
         x.set_color(label_colors[n])
     return fig, dend 
@@ -400,7 +424,8 @@ def plot_explained_var(r, key='yh'):
     ii = np.argsort(np.abs(r['es']))[::-1]
     es = r['es'][ii][:50]
     dset = 'train' if key == 'yh' else 'test'
-    df = pd.DataFrame({'eigenvalue index':np.arange(len(es)), 'explained stress':1 - np.sqrt(1-np.cumsum(es ** 2)/r['fn']), 
+    df = pd.DataFrame({'eigenvalue index':np.arange(len(es)), 
+                       'explained stress':explained_stress(r), 
                        'data':dset})
     f = plt.figure(figsize=(8, 6))
     g = sns.lineplot(data=df, x='eigenvalue index',

@@ -5,7 +5,7 @@ import pandas as pd
 
 from utils import *
 from reparameterization import *
-from embed import lazy_embed
+from utils.embed import lazy_embed
 
 
 def main(loc="results/models/loaded", name='', n=100, ts=None, loaded=False, log=False,
@@ -120,8 +120,14 @@ def get_projection():
 if __name__ == "__main__":
     # ts = np.linspace(0, 1, 20000)
     # main(loc='results/models/moving_y', name='', ts=ts, loaded=True, log=False)
-    data_args = get_configs('configs/data/synthetic-fc-50-0.5.yaml')
-    ts = np.linspace(0.01, 1, 100)
-    main(loc='results/models/sloppy-50', name='', ts=ts, loaded=True, log=False,
-         data_args=data_args)
+    for i in range(3):
+        root = '/home/ubuntu/ext_vol/data/'
+        config_fn = '/home/ubuntu/ext_vol/inpca/configs/data/uniform.yaml' 
+        with open(config_fn) as f:
+            data = yaml.safe_load(f)
+        data_args = get_configs(config_fn)
+        data_args['fn'] = os.path.join(root, f'CIFAR10_uniform_{i}.p')
+        ts = np.linspace(0.01, 1, 100)
+        main(loc='results/models/corners', name=i, ts=ts, loaded=True, log=False,
+            data_args=data_args)
     # get_projection()

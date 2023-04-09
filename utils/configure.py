@@ -87,6 +87,19 @@ def get_init(init_args, model, dev='cuda', data=None, save_fn='', init_seed=42):
             if save_fn:
                 th.save({'data': init_ss, 'configs': SimpleNamespace(**{**init_args})}, save_fn)
             return model
+    elif init_fn == 'perturbed_normal':
+        weights = deepcopy(model.state_dict())
+        fn = os.path.join('/home/ubuntu/ext_vol/init', f"{save_fn}{init_seed}_normal_{init_args['mean']}_{init_args['std']}.p")
+        if os.path.exists(fn):
+            print('loading initial weights from ', fn)
+            model.load_state_dict(th.load(fn))
+        else:
+            setup(init_seed)
+            model.apply(partial(init.fixed_var_normal.init_weights, mean=init_args['mean'], std=init_args['std']))
+            th.save(model.state_dict(), fn)
+        for (n, p) in model.named_parameters():
+            p.data += weights[n]
+        return model
     else:
         init_fn = getattr(init, init_fn)
         model.apply(partial(init_fn.init_weights, **init_args['init_fn_args']))
@@ -95,7 +108,7 @@ def get_init(init_args, model, dev='cuda', data=None, save_fn='', init_seed=42):
 
 def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resize=1):
     name = data_args['data']
-    assert name in ['CIFAR10', 'CIFAR100', 'MNIST', 'synthetic']
+    assert name in ['CIFAR10', 'CIFAR100', 'MNIST', 'synthetic', 'load_existing']
 
     if name == 'synthetic':
         c = data_args['c']
@@ -110,7 +123,7 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
             num_train = data_args['num_train']
             num_val = data_args['num_val']
             d = np.prod(data_args['dshape'])
-            b = 50*c
+            b = 50*c if c > 0 else 1
             evals = b*th.exp(-c*th.arange(d))
             data_train = (th.randn(num_train, d) @ th.diag(th.sqrt(evals / d))).reshape(-1, *data_args['dshape'])
             data_val= (th.randn(num_val, d) @ th.diag(th.sqrt(evals / d))).reshape(-1, *data_args['dshape'])
@@ -135,6 +148,8 @@ def get_data(data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, resi
             ds = {'train': SyntheticData(x=data_train, y=targets_train.long()),
                 'val': SyntheticData(x=data_val, y=targets_val.long())}
             th.save(ds, fn)
+    elif name == 'load_existing':
+        ds = th.load(data_args['fn']) 
     else:
         aug, sub_sample = data_args['aug'], data_args['sub_sample']
         assert aug in ['none', 'simple', 'full']

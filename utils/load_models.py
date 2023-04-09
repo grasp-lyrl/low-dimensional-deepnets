@@ -8,10 +8,10 @@ from collections import defaultdict
 import tqdm
 
 
-def get_ts(bs, epochs, save_init=True, save_freq=4):
+def get_ts(bs, epochs, save_init=5, save_freq=4, len_data=5000):
     t = 0
     ts = [t]
-    n_batches = 50000 // bs
+    n_batches = len_data // bs
     for epoch in range(epochs):
         for i in range(n_batches):
             t += 1
@@ -81,8 +81,13 @@ def load_d(
             if any(np.isnan(d[-1]["f"])):
                 nan_models.append(configs)
                 continue
+            if dconf.get('data') == 'synthetic':
+                ndata=dconf.get('num_train')
+            else:
+                ndata=50000
+
             ts =  get_ts(configs["bs"], dconf.get("epochs", 200), 
-                         dconf.get('save_init', True), dconf.get('save_freq', 4))
+                         dconf.get('save_init', 5), dconf.get('save_freq', 4), len_data=ndata)
             for i in range(len(d)):
                 t = {}
                 t.update(configs)

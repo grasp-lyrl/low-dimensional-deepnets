@@ -22,8 +22,9 @@ def main(all: Param('all', bool, default=False),
     # PC 1-3, colored by model architecture
     if main or all:
         centers = all_centers
-        grid_ratio=[4, 3, 3]
-        grid_size=0.3
+        centers= [0, 0.4, 0.1]
+        grid_ratio=[4, 3, 2]
+        grid_size=0.2
         f, gs = triplot(didx, r, 
                         emph={'geodesic': emph, 'p0': emph[:1], 'p*': emph[-1:]},
                         empsize={'geodesic': 6, 'p0': 55, 'p*': 55, 'ref': 8}, 

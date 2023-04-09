@@ -3,3 +3,4 @@ from utils.load_models import *
 from utils.constants import *
 from utils.distance import *
 from utils.plot import *
+from utils.embed import *

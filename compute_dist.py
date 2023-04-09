@@ -13,7 +13,7 @@ import glob
 import tqdm
 import pandas as pd
 
-from embed import xembed, proj_, lazy_embed
+from utils.embed import xembed, proj_, lazy_embed
 from utils import load_d, get_idx, CHOICES, dbhat
 
 
@@ -34,6 +34,7 @@ def join_didx(loc="inpca_results", key="yh", fn="", groupby=["m"], remove_f=Fals
 
 def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
                     ss=slice(0, -1, 2),
+                    dev='cuda',
                     idx=["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"],
                     avg_err=True, loaded=False, save_didx=False):
     d1 = load_d(
@@ -61,10 +62,11 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
             key=key,
             loc=loc,
             idx=idx,
+            dev=dev,
             force=True,
             distf="dbhat",
             reduction="mean",
-            chunks=600,
+            chunks=800,
             proj=False,
             save_didx=save_didx,
         )
@@ -111,7 +113,6 @@ def compute_distance(
 
     print(len(load_list))
     if parallel > 0:
-        mp.set_start_method('spawn')
         with mp.Pool(processes=parallel) as pool:
             pool.map(
                 partial(process_pair, file_list=file_list, loc=save_loc, idx=idx), load_list, chunksize=1)
@@ -414,37 +415,56 @@ if __name__ == "__main__":
     # fs = [fn_from_config(c) for c in ll]
     # print(len(fs))
 
-    fs_all = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/corners/*.p')
-    fs_noinit = []
+    #########################################
+    # compute pairwise distance for corners #
+    #########################################
+    # fs_all = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/corners/*.p')
+    # fs_noinit = []
 
-    for f in fs_all:
-        configs = json.loads(f[f.find("{"): f.find("}") + 1])
-        if not configs['isinit']:
-            fs_noinit.append(f)
+    # for f in fs_all:
+    #     configs = json.loads(f[f.find("{"): f.find("}") + 1])
+    #     if not configs['isinit']:
+    #         fs_noinit.append(f)
 
-    fs_normal_all = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/loaded/*.p')
-    fs_normal = []
-    for f in fs_normal_all:
-        configs = json.loads(f[f.find("{"): f.find("}") + 1])
-        if configs['m'] == 'allcnn':
-            fs_normal.append(f)
+    # fs_normal_all = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/loaded/*.p')
+    # fs_normal = []
+    # for f in fs_normal_all:
+    #     configs = json.loads(f[f.find("{"): f.find("}") + 1])
+    #     if configs['m'] == 'allcnn':
+    #         fs_normal.append(f)
 
-    fs = fs_all + fs_normal + \
-        ['/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na","interp":false}.p']
-    fn = 'allcnn_geod_debug'
+    # fs = fs_all + fs_normal + \
+    #     ['/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na","interp":false}.p']
+    # fn = 'allcnn_geod_debug'
 
-    print(len(fs))
-    compute_distance(
-        all_files=fs,
-        groupby=["seed"],
-        idx=["seed", "iseed", "m", "opt", "t", "err", "isinit",
-            "verr", "bs", "aug", "lr", "wd", "corner"],
-        save_loc="inpca_results_all/corners",
-        parallel=2
-    )
+    data = 'isog-50'
+    all_files = glob.glob(
+        f'/home/ubuntu/ext_vol/inpca/results/models/{data}/*.p')
+    dfs = pd.DataFrame(
+        [json.loads(f[f.find("{"): f.find("}") + 1]) for f in all_files])
+    fs = {}
+    for ncorners in [1, 2, 5, 10]:
+        iseeds = np.arange(ncorners)
+        seeds = np.arange(42, 92)[:int(50/ncorners)]
+        fs[ncorners] = np.array(all_files)[list(
+            dfs[(dfs.seed.isin(seeds)) & (dfs.iseed.isin(iseeds)) & (dfs.init=='perturbed_normal')].index)]
 
+    mp.set_start_method('spawn')
     from eigvals import main
-    for k in ['yh', 'yvh']:
-        join_didx(loc="inpca_results_all/corners", key=k, fn=fn, groupby=["seed"], remove_f=True)
-        join(loc="inpca_results_all/corners", key=k, fn=fn, groupby=["seed"], save_loc="inpca_results_all/corners", remove_f=True)
-        main(fn=f'{k}_{fn}', save_fn=f'{k}_{fn}', cond='', root="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners")
+    for (i, f) in fs.items():
+        print(len(f))
+        fn = f"{i}_{data}"
+        group = ["opt", "bs"]
+        compute_distance(
+            all_files=f,
+            groupby=group,
+            idx=["seed", "iseed", "m", "opt", "t", "err", "init",
+                "verr", "bs", "aug", "lr", "wd"],
+            save_loc="inpca_results_all/synth",
+            parallel=2
+        )
+
+        for k in ['yh', 'yvh']:
+            join_didx(loc="inpca_results_all/synth", key=k, fn=fn, groupby=group, remove_f=True)
+            join(loc="inpca_results_all/synth", key=k, fn=fn, groupby=group, save_loc="inpca_results_all/synth", remove_f=True)
+            main(fn=f'{k}_{fn}', save_fn=f'{k}_{fn}', cond='', root="/home/ubuntu/ext_vol/inpca/inpca_results_all/synth")

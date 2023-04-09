@@ -6,9 +6,9 @@ import time
 from utils import get_idx
 from fastcore.script import *
 
-def main(fn="yh_all", save_fn="yh_lam", 
-          cond='lam_yh > 0.3',
-          cond_didx="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners/didx_all.p",
+def main(fn="yh_all_with_normal", save_fn="yh_noinit_with_normal", 
+          cond="(isinit == False) or (corner == 'normal')",
+          cond_didx="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners/didx_all_with_normal.p",
          root="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners"):
      if cond:
           didx = th.load(cond_didx)

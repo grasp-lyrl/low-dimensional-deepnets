@@ -186,8 +186,7 @@ def compute_lambda(file_list, reparam=False, force=False,
         labels[k] = y_
 
     didx_all = None
-    cols = ['seed', 'iseed', 'isinit', 'aug', 'm', 'opt', 'bs', 'lr', 'wd', 't', 'err', 'verr', 'favg',
-            'vfavg', 'lam_yh', 'lam_yvh']
+    cols = ['seed', 'iseed', 'isinit', 'corner', 'aug', 'm', 'opt', 'bs', 'lr', 'wd', 't', 'err', 'verr', 'lam_yh', 'lam_yvh']
     for f in tqdm.tqdm(file_list):
         save_fn = os.path.join(save_loc, os.path.basename(f))
         if os.path.exists(save_fn) and not force:
@@ -219,15 +218,12 @@ def compute_lambda(file_list, reparam=False, force=False,
             # qs_ = np.repeat(np.concatenate([qs['yh'], qs['yvh']], axis=1), yhs.shape[0], axis=0)
             # ps_ = np.repeat(np.concatenate([ps['yh'], ps['yvh']], axis=1), yhs.shape[0], axis=0)
             # d['lam'] = project(yhs, ps_, qs_)
-            didx_all = pd.concat([didx_all, d[cols]])
+            didx_all = pd.concat([didx_all, d.reindex(cols, axis=1)])
             th.save(
                 didx_all, os.path.join(didx_loc, f'didx_{didx_fn}.p'))
         else:
             continue
-        if align_didx:
-            d2 = th.load(os.path.join(didx_loc, align_didx))
-            d = didx_all.merge(d2, on=list(didx_all.columns))
-            th.save(d, os.path.join(didx_loc, f'didx_{didx_fn}.p'))
+
 
         if reparam:
             d_reparam = pd.DataFrame()
@@ -246,14 +242,29 @@ def compute_lambda(file_list, reparam=False, force=False,
             r_cols = ['seed', 'aug', 'm', 'opt', 'bs', 'lr', 'wd']
             d_reparam[r_cols] = d[r_cols].iloc[0]
             th.save(d_reparam, save_fn)
+    if align_didx:
+        import ipdb; ipdb.set_trace()
+        d2 = th.load(os.path.join(didx_loc, align_didx))
+        d = didx_all.merge(d2, on=list(didx_all.columns))
+        th.save(d, os.path.join(didx_loc, f'didx_{didx_fn}.p'))
 
 if __name__ == '__main__':
 
     loc = 'results/models/corners'
-    all_files = glob.glob(os.path.join(loc, '*}.p'))
-    compute_lambda(all_files, reparam=False, force=False, 
+    fs_all = glob.glob(os.path.join(loc, '*}.p'))
+    fs = []
+
+    for f in fs_all:
+        configs = json.loads(f[f.find("{"): f.find("}") + 1])
+        if not configs['isinit']:
+            fs.append(f)
+
+    fs.extend([f'/home/ubuntu/ext_vol/inpca/results/models/loaded/{{"seed":{s},"bseed":-1,"aug":"none","m":"allcnn","bn":true,"drop":0.0,"opt":"sgd","bs":200,"lr":0.1,"wd":0.0,"corner":"normal","interp":false}}.p' for s in range(42, 52)])
+    print(len(fs))
+
+    compute_lambda(fs, reparam=False, force=False, 
                    save_loc='results/models/all', 
                    didx_loc='inpca_results_all/corners',
-                   didx_fn='all_with_progress',
-                   align_didx='all',
+                   didx_fn='noinit_all',
+                   align_didx='didx_yh_noinit_with_normal.p'
                 )
