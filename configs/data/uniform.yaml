@@ -1,0 +1,3 @@
+---
+data: "load_existing"
+fn: "/home/ubuntu/ext_vol/data/CIFAR_uniform_0.p"

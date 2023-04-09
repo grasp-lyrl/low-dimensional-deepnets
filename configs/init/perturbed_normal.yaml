@@ -1,0 +1,4 @@
+---
+init_fn: "perturbed_normal"
+mean: 0
+std: 1
