@@ -1,5 +1,5 @@
 import h5py
-from embed import *
+from utils.embed import *
 from compute_dist import *
 
 ############################################
@@ -200,26 +200,27 @@ from compute_dist import *
 
 # Redo distance to geodesic
 # import json
-diffs = []
-cols = ['seed', 'aug', 'm', 'lr', 'opt', 'bs', 'wd']
-for r in tqdm.tqdm(range(0, 2300, 100)):
-    didx_geod = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/inpca_results/didx_yh_geod_c{r}.p')['dc']
-    ii_geod = didx_geod.groupby(cols).indices
-    for c in ii_geod.keys():
+# diffs = []
+# cols = ['seed', 'aug', 'm', 'lr', 'opt', 'bs', 'wd']
+# for r in tqdm.tqdm(range(0, 2300, 100)):
+#     didx_geod = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/inpca_results/didx_yh_geod_c{r}.p')['dc']
+#     ii_geod = didx_geod.groupby(cols).indices
+#     for c in ii_geod.keys():
         
-        if c[2] == 'geodesic':
-            continue
-        dic = {'seed':int(c[0]), 'bseed':-1, 'aug':c[1], 'm':c[2],
-                    'bn':True, 'drop':0.0, 'opt':c[4], 'bs':int(c[5]), 'lr':float(c[3]), 'wd':float(c[6]),
-                    'corner':'normal', 'interp':False}
-        root = '/home/ubuntu/ext_vol/inpca/results/models/loaded/'
-        fn = json.dumps(dic).replace(' ', '') + '.p'
-        try:
-            d_saved = th.load(os.path.join(root, fn))[didx_geod.columns]
-        except FileNotFoundError:
-            print(fn)
+#         if c[2] == 'geodesic':
+#             continue
+#         dic = {'seed':int(c[0]), 'bseed':-1, 'aug':c[1], 'm':c[2],
+#                     'bn':True, 'drop':0.0, 'opt':c[4], 'bs':int(c[5]), 'lr':float(c[3]), 'wd':float(c[6]),
+#                     'corner':'normal', 'interp':False}
+#         root = '/home/ubuntu/ext_vol/inpca/results/models/loaded/'
+#         fn = json.dumps(dic).replace(' ', '') + '.p'
+#         try:
+#             d_saved = th.load(os.path.join(root, fn))[didx_geod.columns]
+#         except FileNotFoundError:
+#             print(fn)
         
-        if not (didx_geod.iloc[ii_geod[c]].reset_index(drop=True) == d_saved).all().all():
-            diffs.append((r,c))
-            print(r, c)
-th.save(diffs, 'diffs.p')
+#         if not (didx_geod.iloc[ii_geod[c]].reset_index(drop=True) == d_saved).all().all():
+#             diffs.append((r,c))
+#             print(r, c)
+# th.save(diffs, 'diffs.p')
+
