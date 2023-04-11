@@ -8,7 +8,7 @@ from collections import defaultdict
 import tqdm
 
 
-def get_ts(bs, epochs, save_init=5, save_freq=4, len_data=5000):
+def get_ts(bs, epochs, save_init=5, save_freq=4, len_data=50000):
     t = 0
     ts = [t]
     n_batches = len_data // bs

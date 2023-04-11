@@ -9,8 +9,10 @@ from utils.embed import lazy_embed
 
 
 def main(loc="results/models/loaded", name='', n=100, ts=None, loaded=False, log=False,
-         data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}):
+         data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, pdata=None):
     data = get_data(data_args)
+    if pdata is not None:
+        pdata = get_data(data_args)
     labels = {}
     qs = {}
     ps = {}
@@ -23,7 +25,14 @@ def main(loc="results/models/loaded", name='', n=100, ts=None, loaded=False, log
         y = np.zeros((y_.size, y_.max() + 1))
         y[np.arange(y_.size), y_] = 1
         qs[k] = np.sqrt(np.expand_dims(y, axis=0))
-        ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
+        if pdata is None:
+            ps[k] = np.sqrt(np.ones_like(qs[k]) / 10)
+        else:
+            y_ = np.array(pdata[key].targets, dtype=np.int32)
+            y = np.zeros((y_.size, y_.max() + 1))
+            y[np.arange(y_.size), y_] = 1
+            ps[k] = np.sqrt(np.expand_dims(y, axis=0))
+
         labels[k] = y_
 
     if ts is None:
@@ -120,6 +129,7 @@ def get_projection():
 if __name__ == "__main__":
     # ts = np.linspace(0, 1, 20000)
     # main(loc='results/models/moving_y', name='', ts=ts, loaded=True, log=False)
+    # main(loc='results/models/loaded', name='', ts=np.linspace(0, 1, 100), loaded=True, log=False)
     for i in range(3):
         root = '/home/ubuntu/ext_vol/data/'
         config_fn = '/home/ubuntu/ext_vol/inpca/configs/data/uniform.yaml' 
@@ -127,7 +137,7 @@ if __name__ == "__main__":
             data = yaml.safe_load(f)
         data_args = get_configs(config_fn)
         data_args['fn'] = os.path.join(root, f'CIFAR10_uniform_{i}.p')
-        ts = np.linspace(0.01, 1, 100)
+        ts = np.linspace(0.0, 1, 100)
         main(loc='results/models/corners', name=i, ts=ts, loaded=True, log=False,
-            data_args=data_args)
+            data_args=data_args, pdata={'data':'CIFAR10', 'aug':'none', 'sub_sample':0})
     # get_projection()
