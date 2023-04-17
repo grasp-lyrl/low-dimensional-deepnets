@@ -14,11 +14,12 @@ from utils.embed import explained_stress
 from matplotlib.colors import ListedColormap
 
 
-def triplot(dc, r, d=3, dims=[0,1,2],
+def triplot(dc, r, d=3, dims=None,
             emph=[], ckey='', empcolor={}, empsize={},
             cdict=None, cmin=None, cmax=None, 
             discrete_c=False, cbins=None, colorscale='vlag', 
             cbar_title=None,
+            s=5,
             grid_size=0.25, grid_ratio=[5, 3, 2], centers=[0, 0, 0],
             flip_dims=None, 
             ax_label=True, legend=False, show=False):
@@ -32,6 +33,9 @@ def triplot(dc, r, d=3, dims=[0,1,2],
         ncols += 2
     fig = plt.figure(figsize=(8*sum(widths)/sum(heights), 8))
     gs = GridSpec(nrows, ncols, width_ratios=widths, height_ratios=heights)
+
+    if dims is None:
+        dims = np.arange(d)
 
     xx = r['xp'].copy()
     if flip_dims is not None:
@@ -50,7 +54,6 @@ def triplot(dc, r, d=3, dims=[0,1,2],
         d_ = dc
 
     ee = r['e']
-    s = 4
 
     c = d_[ckey]
     if cdict is not None:
@@ -76,7 +79,7 @@ def triplot(dc, r, d=3, dims=[0,1,2],
             ax = fig.add_subplot(gs[d1, d2-1])
             sc = ax.scatter(xx[:, d2_], xx[:, d1_],
                             c=c, vmin=cmin, vmax=cmax, 
-                            s=16, lw=0.5, 
+                            s=s, lw=0.5, 
                             alpha=0.5, 
                             cmap=colorscale,
                             rasterized=True)
@@ -161,7 +164,7 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
 
     for i in range(ne):
         sign = -1 if i in flip_dims else 1
-        dc[f"x{i+1}"] = sign*r['xp'][:, i]
+        dc[f"x{dims[i]}"] = sign*r['xp'][:, dims[i]-1]
 
     d_ = pd.DataFrame()
 
@@ -398,14 +401,15 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
     return fig, dend 
 
 def plot_evals(r):
-    fig, ax = plt.subplots(1, figsize=(6, 10))
+    fig, ax = plt.subplots(1, figsize=(2, 9))
     ax.set_yscale('log')
     ax.grid()
-    w = 0.5
+    w = 0.4
     for e in r['es']:
+        e = np.abs(e)
         ax.plot((-w/4, w/4), (np.abs(e), np.abs(e)),
                 c='k' if e > 0 else 'r')
-    ax.set_xlim([-w/3, w/3])
+    ax.set_xlim([-w/2, w/2])
     ax.get_xaxis().set_visible(False)
     return fig
 

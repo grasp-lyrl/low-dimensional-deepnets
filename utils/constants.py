@@ -3,7 +3,7 @@ CHOICES = {
     'm': ["allcnn", "convmixer", "fc",
           "vit", "wr-10-4-8", "wr-16-4-64",
           "fc-200-512-5", "fc-200-512-512-5"],
-    'opt': ["adam", "sgd", "sgdn"],
+    'opt': ["adam", "sgd", "sgdn", "geodesic"],
     'corner': ["uniform", "normal", "subsample-2000", "subsample-200"],
     'lr': [0.001, 0.1, 0.25, 0.5, 0.0005, 0.0025, 0.00125,
            0.005],
