@@ -18,9 +18,9 @@ from utils import load_d, get_idx, CHOICES, dbhat
 
 
 def join_didx(loc="inpca_results", key="yh", fn="", 
-              load_list=None,
+              load_list=[],
               groupby=["m"], remove_f=False):
-    if load_list is None:
+    if len(load_list) == 0:
         load_list = [(c, c) for c in product(*[CHOICES[g] for g in groupby])]
     loaded = set()
     d = pd.DataFrame()
@@ -78,7 +78,7 @@ def dist_from_flist(f1, f2=None, keys=["yh", "yvh"], loc="", fn="",
             force=True,
             distf=distf,
             reduction="mean",
-            chunks=1000,
+            chunks=1200,
             proj=False,
             save_didx=save_didx,
         )
@@ -143,6 +143,7 @@ def compute_distance(
                         distf=distf,
                         idx=idx,
                         pair=pair)
+    return load_list
 
 
 def merge_dists(fn1, fn2, merge_loc="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners/", 
@@ -172,6 +173,10 @@ def merge_dists(fn1, fn2, merge_loc="/home/ubuntu/ext_vol/inpca/inpca_results_al
         with h5py.File(os.path.join(merge_loc, f'w_{key}_{fn1}.h5'), 'r') as f:
             w = f['w'][:]
         dset[:, :] = w
+
+    def is_cts(l):
+        return all((np.array(l[1:]) - np.array(l[:-1])) == 1)
+    assert is_cts(id1) 
     dset[id1[0]:id1[-1]+1, id1[0]:id1[-1]+1] = wi
     f.close()
 
@@ -411,33 +416,40 @@ if __name__ == "__main__":
     ################################################
     # compute pairwise distance for synthetic data #
     ################################################
-    # data = 'nonsloppy-50'
-    # all_files = glob.glob(
-    #     f'/home/ubuntu/ext_vol/inpca/results/models/{data}/*.p')
-    # dfs = pd.DataFrame(
-    #     [json.loads(f[f.find("{"): f.find("}") + 1]) for f in all_files])
-    # di = list(dfs[(dfs.init != 'perturbed_normal')
-    #           & (dfs.m != 'geodesic') 
-    #           & (dfs.init != 'fixed_var_normal')].index)
-    # fs = np.array(all_files)[di]
+    # file_list = {}
+    # for c in [0.5]:
+    #     data = f'sloppy-50-{c}'
+    #     all_files = glob.glob(
+    #         f'/home/ubuntu/ext_vol/inpca/results/models/{data}/*.p')
+    #     dfs = pd.DataFrame(
+    #         [json.loads(f[f.find("{"): f.find("}") + 1]) for f in all_files])
+    #     di = list(dfs[(dfs.init != 'perturbed_normal')
+    #             & (dfs.m != 'geodesic') 
+    #             & (dfs.init != 'fixed_var_normal')].index)
+    #     file_list[f'sloppy_{c}_ignorance'] = np.array(all_files)[di]
+
     # mp.set_start_method('spawn')
     # from eigvals import main
-    # fn = 'nonsloppy_ignorance'
     # group=["m"]
-    # compute_distance(
-    #     all_files=fs,
-    #     groupby=group,
-    #     idx=["seed", "m", "opt", "t", "err",
-    #         "verr", "bs", "aug", "lr", "wd"],
-    #     save_loc="inpca_results_all/synth",
-    #     parallel=4
-    # )
 
-    # for k in ['yh', 'yvh']:
-    #     join_didx(loc="inpca_results_all/synth", key=k, fn=fn, groupby=group, remove_f=True)
-    #     join(loc="inpca_results_all/synth", key=k, fn=fn, groupby=group, save_loc="inpca_results_all/synth", remove_f=True)
-    #     main(fn=f'{k}_{fn}', save_fn=f'{k}_{fn}', cond='', root="/home/ubuntu/ext_vol/inpca/inpca_results_all/synth")
+    # for (fn, fs) in file_list.items():
+    #     compute_distance(
+    #         all_files=fs,
+    #         groupby=group,
+    #         idx=["seed", "m", "opt", "t", "err",
+    #             "verr", "bs", "aug", "lr", "wd"],
+    #         save_loc="inpca_results_all/synth",
+    #         parallel=1
+    #     )
 
+    #     for k in ['yh', 'yvh']:
+    #         join_didx(loc="inpca_results_all/synth", key=k, fn=fn, groupby=group, remove_f=True)
+    #         join(loc="inpca_results_all/synth", key=k, fn=fn, groupby=group, save_loc="inpca_results_all/synth", remove_f=True)
+    #         main(fn=f'{k}_{fn}', save_fn=f'{k}_{fn}', cond='', root="/home/ubuntu/ext_vol/inpca/inpca_results_all/synth")
+
+    ##########################
+    # synthetic data corners #
+    ##########################
     # fs = {}
     # for ncorners in [1, 2, 5, 10]:
     #     iseeds = np.arange(ncorners)
@@ -480,11 +492,11 @@ if __name__ == "__main__":
     fs = fs_all + fs_normal
     fn = 'allcnn_all_geod'
     group = ["seed"]
-    load_list = [((0,), (s,)) for s in list(range(42, 52)) + [0]]
+    load_list = [((0,), (s,)) for s in [0] + list(range(42, 52))]
 
     from eigvals import main
     mp.set_start_method('spawn')
-    compute_distance(
+    load_list = compute_distance(
         all_files=fs,
         groupby=group,
         load_list=load_list,
@@ -492,7 +504,7 @@ if __name__ == "__main__":
              "verr", "bs", "aug", "lr", "wd", "corner"],
         save_loc="inpca_results_all/corners",
         save_didx=True,
-        parallel=2
+        parallel=4
     )
 
     for k in ['yh', 'yvh']:
@@ -501,16 +513,16 @@ if __name__ == "__main__":
         loc = "/home/ubuntu/ext_vol/inpca/inpca_results_all/corners"
         join(loc=loc, key=k, fn="allcnn_all_geod", groupby=["seed"],
             save_loc=loc, remove_f=True)
-        merge_dists("allcnn_all_geod", "allcnn_geod_debug", merge_loc=loc, 
+        merge_dists("allcnn_all_geod", "allcnn_geod", merge_loc=loc, 
                 key=k, save_f="merged_allcnn",
                 cols= ['seed', 'iseed', 'm', 'opt', 'bs', 'aug', 'lr', 'wd', 'corner', 'isinit', 't'])
-        main(fn=f'{k}_merged_allcnn', save_fn=f'{k}_merged_allcnn', cond='',
+        main(key=k, load_fn=f'merged_allcnn', save_fn=f'merged_allcnn', cond='',
              root=loc)
 
 
     #######################################
     # compute pairwise Euclidean Distance #
-    #######################################
+    # #####################################
     # all_f = glob.glob('/home/ubuntu/ext_vol/inpca/results/models/loaded/*.p')
     # fs = []
     # for f in all_f:
@@ -522,7 +534,7 @@ if __name__ == "__main__":
     
     # mp.set_start_method('spawn')
     # from eigvals import main
-    # compute_distance(
+    # load_list = compute_distance(
     #     all_files=fs,
     #     groupby=group,
     #     idx=["seed", "m", "opt", "t", "err", "favg", "vfavg",
@@ -536,10 +548,11 @@ if __name__ == "__main__":
     # fn = "all_euclid"
     # for k in ['yh', 'yvh']:
     #     join_didx(loc="inpca_results_all/euclidean", key=k, fn=fn,
-    #               groupby=group, remove_f=True)
+    #               load_list=load_list,
+    #               groupby=group, remove_f=False)
     #     join(loc="inpca_results_all/euclidean", key=k, fn=fn, groupby=group,
-    #          save_loc="inpca_results_all/euclidean", remove_f=True)
+    #          save_loc="inpca_results_all/euclidean", remove_f=False)
     #     main(fn=f'{k}_{fn}', save_fn=f'{k}_{fn}', cond='',
-    #          root="/home/ubuntu/ext_vol/inpca/inpca_results_all/")
+    #          root="/home/ubuntu/ext_vol/inpca/inpca_results_all/euclidean")
 
-
+    pass

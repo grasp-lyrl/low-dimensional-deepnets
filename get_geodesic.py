@@ -12,7 +12,7 @@ def main(loc="results/models/loaded", name='', n=100, ts=None, loaded=False, log
          data_args={'data': 'CIFAR10', 'aug': 'none', 'sub_sample': 0}, pdata=None):
     data = get_data(data_args)
     if pdata is not None:
-        pdata = get_data(data_args)
+        pdata = get_data(pdata)
     labels = {}
     qs = {}
     ps = {}
@@ -127,9 +127,13 @@ def get_projection():
 
 
 if __name__ == "__main__":
-    # ts = np.linspace(0, 1, 20000)
-    # main(loc='results/models/moving_y', name='', ts=ts, loaded=True, log=False)
-    # main(loc='results/models/loaded', name='', ts=np.linspace(0, 1, 100), loaded=True, log=False)
+    # synthetic data
+    # root = '/home/ubuntu/ext_vol/data/'
+    # config_fn = '/home/ubuntu/ext_vol/inpca/configs/data/synthetic-fc-50-0.5.yaml'
+    # data_args = get_configs(config_fn)
+    # ts = np.linspace(0.0, 1, 100)
+    # main(loc='results/models/sloppy-50', ts=ts, loaded=True, log=False,
+    #     data_args=data_args)
     for i in range(3):
         root = '/home/ubuntu/ext_vol/data/'
         config_fn = '/home/ubuntu/ext_vol/inpca/configs/data/uniform.yaml' 
@@ -138,6 +142,6 @@ if __name__ == "__main__":
         data_args = get_configs(config_fn)
         data_args['fn'] = os.path.join(root, f'CIFAR10_uniform_{i}.p')
         ts = np.linspace(0.0, 1, 100)
-        main(loc='results/models/corners', name=i, ts=ts, loaded=True, log=False,
-            data_args=data_args, pdata={'data':'CIFAR10', 'aug':'none', 'sub_sample':0})
+        main(loc='results/models/corners', name=f'tocorner{i}_', ts=ts, loaded=True, log=False,
+            data_args=data_args)
     # get_projection()

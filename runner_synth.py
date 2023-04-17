@@ -12,7 +12,7 @@ import json
 dev = 'cuda' if th.cuda.is_available() else 'cpu'
 
 
-def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2), fname=''):
+def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batch=np.zeros(2), loss='ce'):
 
     if np.max(fix_batch) == 0:
         batch_sampler = None
@@ -73,8 +73,11 @@ def fit(m, ds, epochs=200, bs=128, autocast=True, opt=None, sched=None, fix_batc
             with th.autocast(enabled=autocast, device_type='cuda'):
                 m.zero_grad()
                 yyh = m(x)
-                yyh = F.log_softmax(yyh, dim=1)
-                f = -th.gather(yyh, 1, y.view(-1, 1)).mean()
+                if loss == 'mse':
+                    f = -0.5*((yyh-y)**2).sum(-1).mean()
+                elif loss == 'ce':
+                    yyh = F.log_softmax(yyh, dim=1)
+                    f = -th.gather(yyh, 1, y.view(-1, 1)).mean()
                 e = (y != th.argmax(yyh, dim=1).long()).float().mean()
 
             if autocast:
