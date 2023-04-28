@@ -30,3 +30,4 @@ notebooks/plots/all_models_train_3d.html
 inpca_results_avg_all/*
 notebooks/AutogluonModels/*
 notebooks/data/*
+configs/data/*.yaml
