@@ -1,0 +1,9 @@
+---
+data: "synthetic"
+aug: "na"
+c: 0.001
+num_train: 5000
+num_val: 1000
+label_model: "random"
+label_model_init: "normal"
+dshape: [200]

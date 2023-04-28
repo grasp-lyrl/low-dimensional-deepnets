@@ -1,0 +1,8 @@
+---
+data: "synthetic"
+aug: "na"
+c: 0.5
+num_train: 5000
+num_val: 1000
+label_model: "fc-200-50-5"
+dshape: [200]

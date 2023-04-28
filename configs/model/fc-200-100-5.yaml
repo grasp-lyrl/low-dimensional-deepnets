@@ -1,0 +1,10 @@
+---
+m: "fcnn"
+model_args:
+  dims: [200, 100, 5]
+  bn: False
+  bias: False
+  dropout_rate: 0.0
+  activation: 'Tanh'
+  out_nonlinear: 'Identity'
+  out_bias: False

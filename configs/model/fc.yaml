@@ -1,0 +1,7 @@
+---
+m: "fcnn"
+model_args:
+  dims: [3072, 1024, 512, 256, 128, 10]
+  bn: True
+  bias: True
+  dropout_rate: 0.0

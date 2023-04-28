@@ -158,3 +158,37 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+results/*
+inpca_results/*
+*.pyc
+torun.txt
+*.txt
+run.sh
+create_torun.py
+*.pdf
+logits.ipynb
+data/*
+load_log.py
+big_run.ipynb
+log*
+runs/*
+inpca_results_all/*
+inpca_results_avg_new/*
+*.h5
+sgd_models.zip
+didxs_yvh_all.p
+notebooks/runs/*
+inpca_results_avg/*
+notebooks/.ipynb_checkpoints/*
+create_adam_torun.py
+inpca_results_mixed/*
+data.p
+notebooks/.ipynb_checkpoints/inpca_plots-checkpoint.ipynb
+notebooks/*.p
+notebooks/plots/*.html
+notebooks/plots/all_models_train_3d.html
+inpca_results_avg_all/*
+notebooks/AutogluonModels/*
+notebooks/data/*
+configs/data/*.yaml
+configs/optim/*.yaml
