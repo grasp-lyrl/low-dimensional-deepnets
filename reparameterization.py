@@ -75,8 +75,6 @@ def reparameterize(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], idx='lam',
     ts = np.linspace(0, 1, (num_ts+1))[1:]
     d[idx] = np.clip(d[idx], *idx_lim)
     d[idx] = d[idx] / (idx_lim[1] - idx_lim[0])
-    # for (c, idx) in configs.items():
-        # di = d.iloc[idx]
     ind = d.index.min()
     max_ind = d.index.max()
     yhs = []
@@ -111,61 +109,6 @@ def reparameterize(d, labels, num_ts=50, groups=['m', 'opt', 'seed'], idx='lam',
             np.log(yhs[-1])[np.arange(
                 len(labels[key])), labels[key]].mean())
     return ts, yhs, errs, favgs
-    # for (c, idx) in configs.items():
-    #     di = d.iloc[idx]
-    #     ind = {'yh': di.index.min(), 'yvh': di.index.min()}
-    #     max_ind = di.index.max()
-    #     for t in ts:
-    #         data = {groups[i]: c[i] for i in range(len(c))}
-    #         data['t'] = t
-    #         for key in ['yh', 'yvh']:
-    #             k = ind[key]
-    #             while k < max_ind:
-    #                 if di.iloc[k][f'lam_{key}'] > t:
-    #                     break
-    #                 k += 1
-    #             if k == max_ind:
-    #                 end_lam = 1
-    #             else:
-    #                 end_lam = di.iloc[k][f'lam_{key}']
-    #             ind[key] = k
-    #             start = di.iloc[max(0, k-1)]
-    #             end = di.iloc[k]
-
-    #             if abs(end_lam - start[f'lam_{key}']) < 1e-8:
-    #                 import ipdb; ipdb.set_trace()
-    #             lam_interp = (t - start[f'lam_{key}']) / (end_lam - start[f'lam_{key}'])
-    #             lam_interp = np.clip(lam_interp, 0, 1)
-    #             r = gamma(lam_interp, np.sqrt(start[key])[None, :], np.sqrt(end[key])[None, :])
-    #             data[key] = (r ** 2).squeeze()
-    #             errkey = 'err' if key == 'yh' else 'verr'
-    #             fkey = 'favg' if key == 'yh' else 'vfavg'
-    #             data[errkey] = (
-    #                 np.argmax(data[key], axis=-1) != labels[key]).mean()
-    #             data[fkey] = - \
-    #                 np.log(data[key])[np.arange(
-    #                     len(labels[key])), labels[key]].mean()
-    #         new_d.append(data)
-    # return pd.DataFrame(new_d)
-                ##################### old #########################
-                # diff = 1
-                # for k in ks:
-                #     p = np.sqrt(di.loc[k][key])[None, :]
-                #     q = np.sqrt(di.loc[k+1][key])[None, :]
-                #     r = gamma(t, ps[key], qs[key])
-                #     lam = project(r, p, q)[0]
-                #     if abs(lam-0.5) < diff:
-                #         diff = abs(lam-0.5)
-                #         data[key] = (gamma(lam, p, q) ** 2).squeeze()
-                #         errkey = 'err' if key == 'yh' else 'verr'
-                #         fkey = 'favg' if key == 'yh' else 'vfavg'
-                #         data[errkey] = (
-                #             np.argmax(data[key], axis=-1) != labels[key]).mean()
-                #         data[fkey] = - \
-                #             np.log(data[key])[np.arange(
-                #                 len(labels[key])), labels[key]].mean()
-                #     print(c, t, k, lam, data[errkey], data[fkey])
-                ##################### old #########################
 
 
 def compute_lambda(file_list, reparam=False, force=False, 
@@ -196,7 +139,6 @@ def compute_lambda(file_list, reparam=False, force=False,
         else:
             try:
                 d = load_d(file_list=[f], avg_err=True, probs=False)
-                # d = th.load(f)
             except:
                 print(f)
                 continue
@@ -213,11 +155,6 @@ def compute_lambda(file_list, reparam=False, force=False,
                 qs_ = np.repeat(qs[key], yhs[key].shape[0], axis=0)
                 ps_ = np.repeat(ps[key], yhs[key].shape[0], axis=0)
                 d[f'lam_{key}'] = project(yhs[key], ps_, qs_)
-            # if not separate:
-            # yhs = np.concatenate([yhs['yh'], yhs['yvh']], axis=1)
-            # qs_ = np.repeat(np.concatenate([qs['yh'], qs['yvh']], axis=1), yhs.shape[0], axis=0)
-            # ps_ = np.repeat(np.concatenate([ps['yh'], ps['yvh']], axis=1), yhs.shape[0], axis=0)
-            # d['lam'] = project(yhs, ps_, qs_)
             didx_all = pd.concat([didx_all, d.reindex(cols, axis=1)])
             th.save(
                 didx_all, os.path.join(didx_loc, f'didx_{didx_fn}.p'))
