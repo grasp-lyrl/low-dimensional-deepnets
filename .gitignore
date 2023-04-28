@@ -31,3 +31,4 @@ inpca_results_avg_all/*
 notebooks/AutogluonModels/*
 notebooks/data/*
 configs/data/*.yaml
+configs/optim/*.yaml

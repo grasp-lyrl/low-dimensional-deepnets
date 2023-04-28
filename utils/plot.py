@@ -1,5 +1,6 @@
 import torch.nn.functional as F
 import torch as th
+from itertools import product
 from bokeh import palettes
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -21,6 +22,7 @@ def triplot(dc, r, d=3, dims=None,
             cbar_title=None,
             s=5,
             grid_size=0.25, grid_ratio=[5, 3, 2], centers=[0, 0, 0],
+            ticks=None,
             flip_dims=None, 
             ax_label=True, legend=False, show=False):
 
@@ -141,7 +143,7 @@ def triplot(dc, r, d=3, dims=None,
             )
             clb.ax.set_yticklabels(ticks)
         else:
-            clb = plt.colorbar(sc, cax=ax, ticks=[0,0.5,1])
+            clb = plt.colorbar(sc, cax=ax, ticks=ticks)
         cbar_title = cbar_title or ckey
         clb.ax.set_title(cbar_title)
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -153,10 +155,11 @@ def triplot(dc, r, d=3, dims=None,
 def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
               ne=3, dims=[1, 2, 3],
               size=5,
-              cdict=None,
-              cols=['seed', 'm', 'opt', 'err', 'verr',
-                    'bs', 'aug', 'bn', 'lr', 'wd'],
+              symbol=None,
+              cols=None,
               color_axis=False, discrete_c=False,
+              cdict=None,
+              grid_corners=None,
               color='t', colorscale='RdBu', 
               flip_dims=[], legend=False,
               xrange=[-1, 1], yrange=[-1, 1], zrange=[-1, 1], opacity=0.7):
@@ -168,6 +171,8 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
 
     d_ = pd.DataFrame()
 
+    if cols is None:
+        cols = list(dc.columns)
     for col in cols:
         d_[col] = f'{col}: ' + dc[col].astype(str)
     text = d_[cols].apply("<br>".join, axis=1)
@@ -179,6 +184,8 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
         colors = getattr(palettes, colorscale)[max(len(c.unique()), 3)]
         cdict = {c: colors[i] for (i, c) in enumerate(c.unique())}
         print(cdict)
+    
+    symbol = dc[symbol] if symbol is not None else ['circle']*len(dc)
 
     fig = go.Figure()
 
@@ -191,7 +198,6 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
         d_ = dc
 
     if discrete_c:
-
         fig.add_trace(
             go.Scatter3d(
                 x=d_[f'x{dims[0]}'],
@@ -201,6 +207,7 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                     size=size,
                     opacity=opacity,
                     color=c.map(cdict),
+                    # symbol=symbol,
                 ),
                 hovertemplate='<b>%{text}</b><extra></extra>',
                 text=text,
@@ -218,6 +225,7 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                 marker=dict(
                     size=size,
                     # opacity=opacity,
+                    # symbol=symbol,
                     color=c.values,
                     # colorscale=colorscale
                 ),
@@ -248,6 +256,26 @@ def plotly_3d(dc, r, emph=[], empcolor={}, empsize={}, empmode='markers',
                     showlegend=legend
                 )
             )
+    if grid_corners is not None:
+        grid_corners = list(product(*zip(*grid_corners)))
+        for iis in [[0, 1], [0, 2], [0, 4], [2, 6], [4, 6], [4, 5], [1, 5], [1, 3], [2, 3]]:
+            start, end = iis
+            lw = 8 
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[grid_corners[start][0], grid_corners[end][0]],
+                    y=[grid_corners[start][1], grid_corners[end][1]],
+                    z=[grid_corners[start][2], grid_corners[end][2]],
+                    mode='lines',
+                    line=dict(color='black', width=lw),
+                    showlegend=False
+                )
+            )
+        fig.update_layout(
+            scene_xaxis_showgrid=False,
+            scene_yaxis_showgrid=False,
+            scene_zaxis_showgrid=False,
+        )
     fig.update_layout(
         autosize=False,
         width=1000,
@@ -348,6 +376,7 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
                     key='yh', 
                     show_err=False,
                     ):
+    label_size= 7
     idxs = didx.groupby(cols).indices
 
     if show_err:
@@ -359,8 +388,10 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
     dend = sch.dendrogram(linkage, orientation='right',
                         no_plot=True, color_threshold=color_threshold)
     label_colors = [cdict[m] for m in ylabels[dend['leaves'], color_by]]
-    dend = sch.dendrogram(linkage, orientation='right', labels=np.array(
-        ylabels[:, 0]), color_threshold=color_threshold, ax=dend_ax,
+    dend = sch.dendrogram(linkage, orientation='right', 
+                          labels=np.array(ylabels[:, 0]), 
+                          leaf_font_size=label_size,
+                          color_threshold=color_threshold, ax=dend_ax,
         above_threshold_color=above_threshold_color)
 
     # barplot of errors
@@ -384,17 +415,27 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
         err_ax.grid(axis='y')
 
 
+    pad = 130
     yax = dend_ax.get_yaxis()
-    r = yax.set_tick_params(pad=103)
+    r = yax.set_tick_params(pad=pad+1)
+    for y in dend_ax.get_yticklabels():
+        y.set_fontweight('bold')
+    widths_ratio = [0.13, 0.18, 0.25, 0.23, 0.23]
+    widths = [int(w * pad) for w in widths_ratio]
     for (ik, k) in enumerate([1, 2, 3, 4, 5]):
         secax = dend_ax.secondary_yaxis('left')
         secax.set_yticks(dend_ax.get_yticks())
         secax.set_yticklabels(ylabels[dend['leaves'], k])
-        secax.get_yaxis().set_tick_params(pad=103-(ik+1)*20, labelsize=5, length=0)
+        secax.get_yaxis().set_tick_params(pad=pad+1-np.sum(widths[:ik+1]), labelsize=label_size, length=0)
         for (n, y) in enumerate(secax.get_ymajorticklabels()):
             y.set_color(label_colors[n])
+            y.set_fontweight('bold')
 
     plt.subplots_adjust(wspace=0)
+    # plt.text(x=-0.106, y=2230, s='Arch    Opt    BS   LR   WD   Aug', 
+    #          fontdict={'fontsize': 10, 'fontweight': 'bold'})
+    plt.text(x=-0.145, y=2230, s='Arch   Opt    BS   LR   WD   Aug', 
+             fontdict={'fontsize': 10, 'fontweight': 'bold'})
     for (n, x) in enumerate(dend_ax.get_ymajorticklabels()):
         # x.set_color(cdict[x.get_text().split(' ')[color_by]])
         x.set_color(label_colors[n])
@@ -405,10 +446,17 @@ def plot_evals(r):
     ax.set_yscale('log')
     ax.grid()
     w = 0.4
-    for e in r['es']:
-        e = np.abs(e)
+    es = explained_stress(r)
+    ii = np.argsort(np.abs(r['es']))[::-1]
+    r['es'] = r['es'][ii]
+    for (i, e) in enumerate(r['es'][:50]):
         ax.plot((-w/4, w/4), (np.abs(e), np.abs(e)),
                 c='k' if e > 0 else 'r')
+        if i in [0, 2, 9, 19, 49]:
+            ax.text(1.7/3 * w, np.abs(e)*0.9, "%.2f" %
+                 (es[i]), size=28)
+        
+    ax.text(0.8/3 * w, 1.3*np.abs(r['es'][0]), "Explained\n   Stress", size=28)
     ax.set_xlim([-w/2, w/2])
     ax.get_xaxis().set_visible(False)
     return fig

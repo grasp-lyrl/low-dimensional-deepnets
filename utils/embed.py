@@ -1,17 +1,9 @@
-from genericpath import isfile
 import numpy as np
 import scipy.linalg as sp
 import torch as th
 
-from itertools import combinations
-import torch.multiprocessing as mp
-from functools import partial
-from itertools import product
 import os
 import h5py
-import json
-import glob
-import tqdm
 import pandas as pd
 
 from utils import *
@@ -158,7 +150,27 @@ def explained_distance(r):
 def explained_stress(r):
     ii = np.argsort(np.abs(r['es']))[::-1]
     es = r['es'][ii][:50]
-    return 1 - np.sqrt(1-np.cumsum(es ** 2)/r['fn'])
+    return 1 - np.sqrt(1-np.cumsum(es ** 2)/r['fn']**2)
+
+
+def weighted_MDS(w, weight, ne=3):
+
+    dmean = (w*weight).sum(1, keepdims=True)
+    w = w-dmean
+    w = w-(w*weight[:, None]).sum(0)
+    w0 = -0.5*w
+
+    w = w0 * weight[None, :]
+    e, v = sp.eigsh(w, ne, which='LM', return_eigenvectors=True)
+    ii = np.argsort(np.abs(e))[::-1]
+    e, v = e[ii], v[:, ii]
+
+    scaling_factor = np.linalg.norm(
+        v*np.sqrt(weight[:, None]), axis=0, keepdims=True)
+    print(scaling_factor)
+    xp = v*np.sqrt(np.abs(e)) / scaling_factor
+    r = dict(xp=xp, e=e, v=v, dmean=dmean)
+    return r
 
 
 def project(

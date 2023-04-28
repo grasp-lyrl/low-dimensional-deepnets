@@ -9,7 +9,9 @@ from fastcore.script import *
 def main(key="yh",
          load_fn="all_with_normal", 
          save_fn="noinit_with_normal", 
+         save_w=False,
          centering='normal',
+         weights=None,
          cond="(isinit == False) or (corner == 'normal')",
          cond_didx="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners/didx_all_with_normal.p",
          root="/home/ubuntu/ext_vol/inpca/inpca_results_all/corners"):
@@ -27,6 +29,8 @@ def main(key="yh",
           w = f["w"][ii, :][:, ii]
      else:
           w = f["w"][:]
+     if save_w:
+          th.save(w, os.path.join(root, f"w_{key}_{save_fn}.p"))
      print("w loaded, t: ", time.time() - start_t)
      start_t = time.time()
      print(w.shape)
@@ -39,16 +43,11 @@ def main(key="yh",
           w = w - w.mean(1, keepdims=True)
           w = w*(-0.5)
      elif centering == 'weighted':
-          weight = np.ones(len(didx))
-          iw = get_idx(didx, "m=='geodesic'")
-          weight[iw] = len(ii)
-          weight = weight[ii]
-          weight /= weight.sum()
-          dmean = (w*weight).sum(1, keepdims=True)
+          dmean = (w*weights).sum(1, keepdims=True)
           w -= dmean
-          w -= (w*weight[:, None]).sum(0)
+          w -= (w*weights[:, None]).sum(0)
           w *= -0.5
-          w *= weight[None, :]
+          w *= weights[None, :]
      elif centering == 'pca':
           w *= w
           dmean = w[:, :1]
@@ -72,9 +71,11 @@ def main(key="yh",
      ii = np.argsort(np.abs(e))[::-1]
      e, v = e[ii], v[:, ii]
 
-     # scaling_factor = np.linalg.norm(v*np.sqrt(weight[:, None]), axis=0)
-     # xp = v*np.sqrt(np.abs(e)) / scaling_factor
-     xp = v*np.sqrt(np.abs(e))
+     if centering == 'weighted':
+          scaling_factor = np.linalg.norm(v*np.sqrt(weights[:, None]), axis=0)
+          xp = v*np.sqrt(np.abs(e)) / scaling_factor
+     else:
+          xp = v*np.sqrt(np.abs(e))
      r.update(dict(xp=xp, e=e, v=v, diag=np.diag(w), fn=(w**2).sum().sum()))
      th.save(r, os.path.join(root, f"r_{key}_{save_fn}.p"))
      print("projected, t: ", time.time() - start_t)

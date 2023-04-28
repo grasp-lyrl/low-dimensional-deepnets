@@ -64,64 +64,6 @@ from compute_dist import *
 # dist_from_flist(f1=allf, f2=interpf, keys=["yh"],
 #                 loc="inpca_results_mixed", fn=f"subset", save_didx=True)
 
-##############################
-# compute euclidean distance #
-##############################
-
-# didx = th.load(
-#     "/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all.p").reset_index(drop=True)
-# idxs = get_idx(
-#     didx, "(m=='allcnn' and aug == 'simple' and wd==0.0) or m=='geodesic'")
-# didx = didx.iloc[idxs].reset_index(drop=True)
-# cols = ['seed', 'm', 'opt', 'bs', 'aug', 'lr', 'wd']
-# idxs = didx.groupby(cols).indices
-# fs = []
-# root = '/home/ubuntu/ext_vol/inpca/results/models/loaded'
-# for c in idxs.keys():
-#     seed, m, opt, bs, aug, lr, wd = c
-#     seed = int(seed)
-#     bs = int(bs) if bs != 'na' else bs
-#     if bs == 'na':
-#         fn = json.dumps(dict(seed=seed, bseed=-1, aug='na', m=m, bn='na', drop='na',
-#                                 opt=opt, bs=bs, lr=lr, wd=wd, interp=False)).replace(" ", "")
-#     else:
-#         fn = json.dumps(dict(seed=seed, bseed=-1, aug=aug, m=m, bn=True, drop=0.0,
-#                                 opt=opt, bs=bs, lr=lr, wd=wd, corner='normal', interp=False)).replace(" ", "")
-    
-#     fs.append(os.path.join(root, f'{fn}.p'))
-
-# d1 = load_d(
-#     file_list=fs,
-#     avg_err=False,
-# )
-
-# d2 = None
-# key = "yh"
-# fn = "euclid"
-# loc = "inpca_results_all"
-# idx = ["seed", "m", "opt", "t", "err", "verr", "bs", "aug", "lr", "wd"]
-# xembed(
-#     d1,
-#     d2,
-#     fn=f"{key}_{fn}",
-#     probs=True,
-#     key=key,
-#     loc=loc,
-#     idx=idx,
-#     force=True,
-#     distf="deuclid",
-#     reduction="none",
-#     chunks=4000,
-#     proj=True,
-#     save_didx=True,
-# # )
-# w = th.load("/home/ubuntu/ext_vol/inpca/inpca_results_all/w_yh_euclid.p")
-# w = (w**2) / 25000
-# l = np.eye(w.shape[0]) - 1.0 / w.shape[0]
-# w = -l @ w @ l / 2
-# r = proj_(w, w.shape[0], 3)
-# th.save(r, '/home/ubuntu/ext_vol/inpca/inpca_results_all/r_yh_euclid_mean.p')
-
 #######################
 # compute error count #
 #######################
@@ -182,7 +124,6 @@ from compute_dist import *
 # dset = h.create_dataset('w', data=w_sgd)
 
 # convert all loaded df probs to log form
-
 # loc = '/home/ubuntu/ext_vol/inpca/results/models/loaded'
 # all_files = glob.glob(os.path.join(loc, "*}.p"))[1819:]
 # for f in tqdm.tqdm(all_files):
