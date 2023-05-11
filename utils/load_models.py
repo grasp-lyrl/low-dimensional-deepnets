@@ -74,6 +74,7 @@ def load_d(
             for k in keys:
                 if (d_.iloc[0][k] < 0).any():
                     d_[k] = d_.apply(lambda r: np.exp(r[k]), axis=1)
+                d_[k] = d_.apply(lambda r: r[k].squeeze(), axis=1)
             loaded_r.append(d_)
         else:
             d = d_["data"]
