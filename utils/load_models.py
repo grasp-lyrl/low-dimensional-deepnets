@@ -30,6 +30,12 @@ def get_ts(bs, epochs, save_init=5, save_freq=4, len_data=50000):
 def get_idx(dd, cond):
     return dd.query(cond).index.tolist()
 
+def c2fn(c):
+    root = '/home/ubuntu/ext_vol/inpca/results/models/loaded/'
+    fdict = dict(seed=int(c[0]), bseed=-1, aug=c[4], m=c[1], bn=True, drop=0., opt=c[2],
+                 bs=int(c[3]), lr=float(c[-2]), wd=float(c[-1]), corner='normal', interp=False)
+    fn = os.path.join(root, f'{json.dumps(fdict).replace(" ", "")}.p')
+    return fn
 
 def get_row_idx(dd, row, idxs=None):
     c = []

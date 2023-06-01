@@ -171,13 +171,10 @@ from compute_dist import *
 
 # from reparameterization import v0
 
-# def num_deriv(yhs, center=5, win=5):
-#     # yhs = [num_models, num_times, num_samples, num_classes]
-#     yhs = yhs[:, center-win:center+win+1, :, :]
-#     tan = (yhs[:, 2*win:win:-1, :, :] - yhs[:, :win, :, :])
+# fn = 'four_pts_avg_0.1_0.9_0_0'
+# get_rel_err_four_pts(fn)
 
-#     tan = tan/np.arange(win*2, 0, -2)[None, :, None, None]
-#     return tan.sum(1) / (win-1)
+# fn = 'all_tangents'
 
 
 # def sph_interp(init, tan, ts):
@@ -252,145 +249,74 @@ from compute_dist import *
 # it, et = 50, 50
 # ne = 2
 
-# # fn = 'geodesic_only'
-# fn = 'four_pts'
-# load=True
-# if load:
-#     all_points = th.load('all_points_tangent.p')
-# else:
-#     vinit = np.zeros([N, C])
-#     vend = np.zeros([N, C])
-#     for i in range(0, len(configs), chunks):
-#         fs = [c2fn(c) for c in configs[i:i+chunks]]
-#         d = load_d(fs, avg_err=True)
-#         d = d.reset_index(drop=True)
-#         cols = ["seed", "m", "opt", "bs", "aug", "lr", "wd"]
-#         yhs_ = []
-#         for ii in d.groupby(cols).indices.values():
-#             y_ = np.squeeze(np.stack(d.iloc[ii].yh))
-#             if (y_ < 0).any():
-#                 y_ = np.exp(y_)
-#             yhs_.append(np.vstack([y_[:10], y_[-10:]]))
-#         yhs_ = np.stack(yhs_) 
-#         print(yhs_.shape)
+# chunks=100
+# vinit = np.zeros([N, C])
+# vend = np.zeros([N, C])
+# for i in range(0, len(configs), chunks):
+#     fs = [c2fn(c) for c in configs[i:i+chunks]]
+#     d = load_d(fs, avg_err=True)
+#     d = d.reset_index(drop=True)
+#     d = d[d.favg < 4].reset_index(drop=True)
+#     cols = ["seed", "m", "opt", "bs", "aug", "lr", "wd"]
+#     yhs_ = []
+#     for ii in d.groupby(cols).indices.values():
+#         y_ = np.squeeze(np.stack(d.iloc[ii].yh))
+#         if (y_ < 0).any():
+#             y_ = np.exp(y_)
+#         yhs_.append(np.vstack([y_[:10], y_[-10:]]))
+#     yhs_ = np.stack(yhs_) 
+#     print(yhs_.shape)
 
 
-#         nmodels, T, _, _ = yhs_.shape
-#         vinit += avg_v0(
-#                 p=np.sqrt(np.tile(p0[None, :, :], [nmodels, 1, 1])),
-#                 q=np.sqrt(yhs_), center=5, win=4
+#     nmodels, T, _, _ = yhs_.shape
+#     vinit += avg_v0(
+#             p=np.sqrt(np.tile(p0[None, :, :], [nmodels, 1, 1])),
+#             q=np.sqrt(yhs_), center=5, win=4
+#             ).sum(0)
+#     vend += avg_v0(p=np.sqrt(np.tile(ps[None, :, :], [nmodels, 1, 1])),
+#                 q=np.sqrt(yhs_), center=T-15, win=5
 #                 ).sum(0)
 #         vend += avg_v0(p=np.sqrt(np.tile(ps[None, :, :], [nmodels, 1, 1])),
 #                     q=np.sqrt(yhs_), center=T-15, win=5
 #                     ).sum(0)
 
-#     vinit_avg = vinit / len(configs)
-#     vinit_avg /= np.linalg.norm(vinit_avg)
-#     vend_avg = vend / len(configs)
-#     vend_avg /= np.linalg.norm(vend_avg)
+# vinit_avg = vinit / len(configs)
+# vinit_avg /= np.linalg.norm(vinit_avg)
+# vend_avg = vend / len(configs)
+# vend_avg /= np.linalg.norm(vend_avg)
 
-#     init_tan = sph_interp(p0, vinit_avg, ts=np.arange(it)).squeeze()
-#     end_tan = sph_interp(ps, -vend_avg, ts=np.arange(et)).squeeze()
+# init_tan = sph_interp(p0, vinit_avg, ts=np.arange(50)).squeeze()
+# end_tan = sph_interp(ps, -vend_avg, ts=np.arange(50)).squeeze()
 
-#     all_points = th.tensor(np.vstack([init_tan, geod, end_tan]))
-#     th.save(all_points, 'all_points_tangent.p')
+# all_points = th.tensor(np.vstack([init_tan, geod, end_tan]))
+# th.save(all_points, f'all_points_tangent.p')
 
-# if fn== 'four_pts':
-#     idxs = [0, 5, -5, -1]
-#     all_points = all_points[idxs, :]
-#     th.save(all_points, f'all_points_tangent_{fn}.p')
-# elif fn== 'geodesic_only':
-#     all_points = th.tensor(np.stack(g.yh))
-#     th.save(all_points, f'all_points_tangent_{fn}.p')
-# dists = dbhat(all_points, all_points, chunks=1000)
+# all_points = th.load('all_points_tangent.p')
+# dists = dbhat(all_points, all_points, chunks=100)
 # dmean = dists.mean(0)
-
-# if fn == 'four_pts':
-#     l = np.eye(dists.shape[0]) - 1.0 / dists.shape[0]
-#     dists = -l @ dists @ l / 2
-#     e, v = np.linalg.eigh(dists)
-#     ii = np.argsort(np.abs(e))[::-1]
-#     e, v = e[ii], v[:, ii]
-#     xp = v * np.sqrt(np.abs(e))
-#     r = dict(xp=xp, e=e, v=v)
-# else:
-#     r = embed_(dists, ne)
-#     r['dmean'] = dmean
+# l = np.eye(dists.shape[0]) - 1.0 / dists.shape[0]
+# dists = -l @ dists @ l / 2
+# e, v = np.linalg.eigh(dists)
+# ii = np.argsort(np.abs(e))[::-1]
+# e, v = e[ii], v[:, ii]
+# xp = v * np.sqrt(np.abs(e))
+# r = dict(xp=xp, e=e, v=v)
 # th.save(r, f'r_tangent_{fn}.p')
 
+# chunks = 100
 # for i in range(0, len(configs), chunks):
 #     fs = [c2fn(c) for c in configs[i:i+chunks]]
 #     d = load_d(fs, avg_err=True)
 #     d = d.reset_index(drop=True)
+#     d = d[d.favg < 4].reset_index(drop=True)
 #     yhs = np.stack(d.yh)
 #     pts = lazy_embed(new_pts=th.tensor(yhs),
-#                  ps=all_points.float(), 
-#                  evals=r['e'], evecs=r['v'], d_mean=dmean, chunks=500)
+#                      ps=all_points.float(),
+#                      evals=r['e'], evecs=r['v'], d_mean=dmean, chunks=500)
 #     xp = np.vstack([r['xp'], pts])
 #     r['xp'] = xp
 #     th.save(r, f'r_tangent_{fn}.p')
 
 
-fn = 'geodesic_only'
-r = th.load(f'/home/ubuntu/ext_vol/inpca/r_tangent_{fn}.p')
-# r = th.load(f'/home/ubuntu/ext_vol/inpca/r_tangent.p')
-d = th.load(
-    '/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all_progress.p')
-d = d[d.m != 'geodesic'].reset_index(drop=True)
-if fn == 'geodesic_only':
-    didx = pd.DataFrame(
-        ['geod']*100 \
-        + ['original']*151407,
-        columns=['name'])
-    didx['t'] = list(np.arange(100)) \
-        + list(np.arange(151407))
-elif fn == 'four_pts':
-    didx = pd.DataFrame(
-        ['init']*2\
-        +['end']*2\
-        + ['original']*151407,
-        columns=['name'])
-    didx['t'] = list(np.arange(2)) \
-        + list(np.arange(2)) \
-        + list(np.arange(151407))
-else:
-    didx = pd.DataFrame(
-        ['init']*50\
-        +['geod']*50\
-        +['end']*50\
-        + ['original']*151407,
-        columns=['name'])
-    didx['t'] = list(np.arange(50)) \
-        + list(np.arange(50)) \
-        + list(np.arange(50)) \
-        + list(np.arange(151407))
-rtrue = th.load('/home/ubuntu/ext_vol/inpca/inpca_results_all/r_yh_all_geod.p')
-rel_err = []
-if fn == 'geodesic_only':
-    startid = 100
-    ne = 6
-elif fn == 'four_pts':
-    startid = 4
-    ne = 5
-else:
-    startid = 150
-    ne = 6
-for i in range(1, ne):
-    wsum = 0
-    true_err = 0
-    tan_err = 0
-    for aa in tqdm.tqdm(th.chunk(th.arange(len(d)), 15)):
-        for bb in th.chunk(th.arange(len(d)), 15):
-            dtrue = dinpca(th.tensor(rtrue['xp'][aa, :i]),
-                           th.tensor(rtrue['xp'][bb, :i]),
-                           sign=th.tensor(np.sign(rtrue['e'][:i])).double()).cpu().numpy()
-            dd = dinpca(th.tensor(r['xp'][startid+aa, :i]),
-                        th.tensor(r['xp'][startid+bb, :i]),
-                        sign=th.tensor(np.sign(r['e'][:i])).double()).cpu().numpy()
-            with h5py.File('/home/ubuntu/ext_vol/inpca/inpca_results_all/w_yh_all_geod.h5', 'r') as f:
-                w = f['w'][list(aa), :][:, list(bb)]
-            tan_err += np.abs(dd.T-w).sum()
-            true_err += np.abs(dtrue.T-w).sum()
-            wsum += w.sum()
-    rel_err.append([tan_err/wsum, true_err/wsum])
-    th.save(rel_err, f'rel_err_{fn}.p')
+# fn = get_embed_four_pts(0.2, 0.8, 0, 0)
+# get_rel_err_four_pts(fn = fn, n=4, didx_fn=fn, rtrue_fn=fn)

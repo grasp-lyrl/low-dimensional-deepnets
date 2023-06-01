@@ -116,6 +116,18 @@ def lazy_embed(
     return (1 / sqrtsigma) * np.matmul(dp_mean, evecs)
 
 
+def full_embed(dists):
+    dmean = dists.mean(0)
+    l = np.eye(dists.shape[0]) - 1.0 / dists.shape[0]
+    dists = -l @ dists @ l / 2
+    e, v = np.linalg.eigh(dists)
+    ii = np.argsort(np.abs(e))[::-1]
+    e, v = e[ii], v[:, ii]
+    xp = v * np.sqrt(np.abs(e))
+    r = dict(xp=xp, e=e, v=v)
+    return dmean, r
+
+
 def proj_(w, n, ne):
     print("Projecting")
     e1, v1 = sp.eigh(
@@ -136,15 +148,18 @@ def explained_distance(r):
     es = r['es'][ii]
     vs = r['vs'][:, ii]
     b = r['diag']
-    tr = r['tr']
+    n = len(b)
+    trb = np.sum(b)
+    dfnorm = 2*trb**2 + 2*n*np.linalg.norm(b)**2+4*r['fn']**2
 
     df = []
     for i in range(len(es)):
-        tr = 2*(r['tr'] - es[:i].sum())**2
-        bnorm = 2*len(vs)*((b - (es[:i]*(vs[:, :i]**2)).sum(1))**2).sum()
-        Bf = 4*(r['fn']**2 - (es[:i]**2).sum())
-        df.append(tr+bnorm+Bf)
-    return np.sqrt(df/(r['fn'])**2)
+        t1 = 2*(trb - es[:i].sum())**2
+        bk = ((vs[:, :i]**2) * es[:i]).sum(-1)
+        t2 = 2*n*np.linalg.norm(b - bk)**2
+        t3 = 4*(r['fn']**2 - (es[:i]**2).sum())
+        df.append(np.sqrt((t1+t2+t3) / dfnorm))
+    return df
 
 
 def explained_stress(r):
