@@ -8,17 +8,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import h5py
-from utils import c2fn, dbhat, dinpca, lazy_embed, load_d, full_embed
+from utils import c2fn, dbhat, dinpca, lazy_embed, load_d, full_embed, get_idx
 from reparameterization import v0
 
 # all analysis in this file excludes points that are far away from the main manifold
 
+root = '/home/ubuntu/ext_vol/inpca/inpca_results_all/tangents'
 g = th.load(
     '/home/ubuntu/ext_vol/inpca/results/models/loaded/{"seed":0,"bseed":-1,"aug":"na","m":"geodesic","bn":"na","drop":"na","opt":"geodesic","bs":"na","lr":"na","wd":"na","interp":false}.p')
 geod = np.stack(g.yh)[::2, :, :]
-p0 = geod[0, :]
-ps = geod[-1, :]
-N, C = p0.shape
+p0 = geod[:1, :]
+ps = geod[-1:, :]
+_, N, C = p0.shape
 
 
 def num_deriv(yhs, center=5, win=5):
@@ -99,27 +100,35 @@ def get_avg_pts(lam1, lam2, n1, n2, configs, chunks=100, std=0.05):
     return init_pts, end_pts
 
 
-def get_embed_four_pts(lam1, lam2, n1, n2, fn='', root='/home/ubuntu/ext_vol/inpca/inpca_results_all/tangents'):
+def get_embed_four_pts(lam1, lam2, n1, n2, 
+                       fn='', dcond="m != 'geodesic'",
+                       with_outliers=False,
+                       root='/home/ubuntu/ext_vol/inpca/inpca_results_all/tangents'):
     fn = f'{fn}{lam1}-{lam2}-{n1}-{n2}'
+    if with_outliers:
+        fn = f'{fn}-with_outliers'
     chunks = 100
     didx = th.load(
         '/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all_progress.p')
-    didx = didx[didx.m != 'geodesic'].reset_index(drop=True)
+    didx = didx.iloc[get_idx(didx, dcond)].reset_index(drop=False)
     cols = ["seed", "m", "opt", "bs", "aug", "lr", "wd"]
     configs = list(didx.groupby(cols, sort=False).count().index)
     init_pts, end_pts = get_avg_pts(lam1, lam2, n1, n2, configs)
-    all_points = np.stack([p0, ps, init_pts, end_pts])
+    all_points = th.tensor(np.vstack([p0, ps, init_pts, end_pts]))
+    print(fn)
     th.save(all_points, os.path.join(root, f'all_points_{fn}.p'))
+    th.save(didx[cols+["index", "t"]], os.path.join(root, f'didx_{fn}.p'))
 
     dists = dbhat(all_points, all_points, chunks=100)
     dmean, r = full_embed(dists)
     th.save(r, os.path.join(root, f'r_tangent_{fn}.p'))
 
     for i in range(0, len(configs), chunks):
-        fs = [c2fn(c) for c in configs[i:i+chunks]]
+        fs = c2fn(configs[i:i+chunks])
         d = load_d(fs, avg_err=True)
         d = d.reset_index(drop=True)
-        d = d[d.favg < 4].reset_index(drop=True)
+        if not with_outliers:
+            d = d[d.favg < 4].reset_index(drop=True)
         yhs = np.stack(d.yh)
         pts = lazy_embed(new_pts=th.tensor(yhs),
                          ps=all_points.float(),
@@ -127,11 +136,11 @@ def get_embed_four_pts(lam1, lam2, n1, n2, fn='', root='/home/ubuntu/ext_vol/inp
         xp = np.vstack([r['xp'], pts])
         r['xp'] = xp
         th.save(r, os.path.join(root, f'r_tangent_{fn}.p'))
-    return fn
+    return fn, configs
 
 
 def get_rel_err(fn, ne=4, didx_fn='', rtrue_fn='', root='/home/ubuntu/ext_vol/inpca/inpca_results_all/tangents'):
-    r = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/r_tangent_{fn}.p')
+    r = th.load(os.path.join(root, f'r_tangent_{fn}.p'))
 
     if didx_fn:
         d = th.load(os.path.join(root, f'didx_{didx_fn}.p'))
@@ -139,7 +148,7 @@ def get_rel_err(fn, ne=4, didx_fn='', rtrue_fn='', root='/home/ubuntu/ext_vol/in
         d = th.load(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_no_outliers.p')
 
     if rtrue_fn:
-        rtrue = th.load(os.path.join(root, f'r_tangent_{rtrue_fn}.p'))
+        rtrue = th.load(os.path.join(root, f'rtrue_{rtrue_fn}.p'))
     else:
         rtrue = th.load(
             '/home/ubuntu/ext_vol/inpca/inpca_results_all/r_yh_no_outliers.p')
@@ -154,16 +163,19 @@ def get_rel_err(fn, ne=4, didx_fn='', rtrue_fn='', root='/home/ubuntu/ext_vol/in
         true_err = 0
         for aa in tqdm.tqdm(th.chunk(th.arange(len(d)), 20)):
             for bb in th.chunk(th.arange(len(d)), 20):
-                dd = dinpca(th.tensor(r['xp'][start_idx+aa, :i]),
+                if i < r['xp'].shape[1]:
+                    dd = dinpca(th.tensor(r['xp'][start_idx+aa, :i]),
                             th.tensor(r['xp'][start_idx+bb, :i]),
                             dev='cuda',
                             sign=th.tensor(np.sign(r['e'][:i])).double()).cpu().numpy()
+                else:
+                    dd = np.zeros([len(bb), len(aa)])
                 if rtrue_fn:
                     dtrue = dinpca(th.tensor(rtrue['xp'][aa, :i]), 
                                    th.tensor(rtrue['xp'][bb, :i]), 
                                    sign=th.tensor(np.sign(rtrue['e'][:i])).double()).cpu().numpy()
                 else:
-                    dtrue=0
+                    dtrue=np.zeros([len(bb), len(aa)])
                 with h5py.File(f'/home/ubuntu/ext_vol/inpca/inpca_results_all/w_yh_all_geod.h5', 'r') as f:
                     amin, amax = ii[aa].min(), ii[aa].max()
                     bmin, bmax = ii[bb].min(), ii[bb].max()
@@ -182,5 +194,18 @@ def get_rel_err(fn, ne=4, didx_fn='', rtrue_fn='', root='/home/ubuntu/ext_vol/in
 
 if __name__ == '__main__':
 
-    fn = get_embed_four_pts(0.2, 0.8, 0, 0)
-    get_rel_err(fn = fn, ne=4)
+    # fn, configs = get_embed_four_pts(0.2, 0.8, 0, 0, fn="sgd_", 
+    #                                  dcond="opt=='sgd' and aug=='none' and bs=='200' and lr!='0.001' and wd=='0.0' and m != 'wr-16-4-64'")
+    # fn, configs = get_embed_four_pts(0.3, 0.7, 0, 0, fn="allcnn_", 
+    #                                  with_outliers=False,
+    #                                  dcond="m=='allcnn' and aug=='none' and bs=='200' and lr!='0.001' and wd=='0.0'")
+
+    # yhs = np.stack(load_d(c2fn(configs)).yh)
+    # dists = dbhat(th.tensor(yhs), th.tensor(yhs), chunks=800)
+    # dmean, r = full_embed(dists)
+    # th.save(r, os.path.join(root, f'rtrue_{fn}.p'))
+    # get_rel_err(fn=fn, ne=10,  didx_fn=fn, rtrue_fn=fn)
+
+    fn, configs = get_embed_four_pts(0.3, 0.7, 0, 0, fn="", 
+                                     with_outliers=False)
+    get_rel_err(fn=fn)

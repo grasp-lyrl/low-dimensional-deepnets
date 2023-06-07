@@ -144,7 +144,7 @@ def proj_(w, n, ne):
 
 
 def explained_distance(r):
-    ii = np.argsort(r['es'])[::-1]
+    ii = np.argsort(np.abs(r['es']))[::-1]
     es = r['es'][ii]
     vs = r['vs'][:, ii]
     b = r['diag']
