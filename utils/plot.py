@@ -415,12 +415,12 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
         err_ax.grid(axis='y')
 
 
-    pad = 130
+    pad = 145
     yax = dend_ax.get_yaxis()
     r = yax.set_tick_params(pad=pad+1)
     for y in dend_ax.get_yticklabels():
         y.set_fontweight('bold')
-    widths_ratio = [0.13, 0.18, 0.25, 0.23, 0.23]
+    widths_ratio = [0.16, 0.17, 0.24, 0.23, 0.22]
     widths = [int(w * pad) for w in widths_ratio]
     for (ik, k) in enumerate([1, 2, 3, 4, 5]):
         secax = dend_ax.secondary_yaxis('left')
@@ -434,7 +434,7 @@ def plot_dendrogram(linkage, ylabels, cdict, didx, color_by=0,
     plt.subplots_adjust(wspace=0)
     # plt.text(x=-0.106, y=2230, s='Arch    Opt    BS   LR   WD   Aug', 
     #          fontdict={'fontsize': 10, 'fontweight': 'bold'})
-    plt.text(x=-0.145, y=2230, s='Arch   Opt    BS   LR   WD   Aug', 
+    plt.text(x=-0.15, y=2230, s='Arch   Opt  BS    LR    WD    Aug', 
              fontdict={'fontsize': 10, 'fontweight': 'bold'})
     for (n, x) in enumerate(dend_ax.get_ymajorticklabels()):
         # x.set_color(cdict[x.get_text().split(' ')[color_by]])

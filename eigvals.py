@@ -83,8 +83,11 @@ def main(key="yh",
 
 if __name__ == '__main__':
      # main(fn='yh_all_geod', save_fn='yh_allcnn', cond="m=='allcnn'", root='/home/ubuntu/ext_vol/inpca/inpca_results_all')
-    fn = "all_euclid"
-    for k in ['yh', 'yvh']:
-        main(key=k, load_fn=fn, save_fn=fn, cond='',
-             centering='pca',
-             root="/home/ubuntu/ext_vol/inpca/inpca_results_all/euclidean")
+#     fn = "all_euclid"
+     fn = "no_outliers"
+     for k in ['yh']:
+          main(key=k, load_fn='all_geod', save_fn=fn, 
+               cond='favg < 4',
+               centering='normal',
+               cond_didx="/home/ubuntu/ext_vol/inpca/inpca_results_all/didx_geod_all_progress.p",
+               root="/home/ubuntu/ext_vol/inpca/inpca_results_all")
